@@ -1,0 +1,405 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  AWS CloudFormation security groups
+
+Parameters:
+  pEnvironment:
+    Description: Environment
+    Type: String
+
+Mappings:
+  EnvironmentIPs:
+    dev:
+      IntegracionEKS: 'YOUR_NETWORK_CIDR'
+      integracionPODs: 'YOUR_NETWORK_CIDR'
+      IntegracionKube: 'YOUR_NETWORK_CIDR'
+      ApiConnectV5: 'YOUR_NETWORK_CIDR'
+      balanceadorOnPremise: 'YOUR_NETWORK_CIDR'
+    qa:
+      IntegracionEKS: 'YOUR_NETWORK_CIDR'
+      integracionPODs: 'YOUR_NETWORK_CIDR'
+      IntegracionKube: 'YOUR_NETWORK_CIDR'
+      ApiConnectV5: 'YOUR_NETWORK_CIDR'
+      balanceadorOnPremise: 'YOUR_NETWORK_CIDR'
+    pdn:
+      IntegracionEKS: 'YOUR_NETWORK_CIDR'
+      integracionPODs: 'YOUR_NETWORK_CIDR'
+      IntegracionKube: 'YOUR_NETWORK_CIDR'
+      ApiConnectV5: 'YOUR_NETWORK_CIDR'
+      balanceadorOnPremise: 'YOUR_NETWORK_CIDR'
+
+
+
+Conditions:
+  cNotPdnEnv: !Not [!Equals [!Ref pEnvironment, pdn]]
+
+Resources:
+
+# Security group for privileged administrator access
+  rCyberArkSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow access from privileged access service
+      GroupName: !Join ["", [!Ref 'AWS::StackName' , "-privileged-access"]]
+      VpcId:
+        Fn::ImportValue: DefaultVPCId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          Description: "Allow access from cloud administrator network"
+          FromPort: 22
+          ToPort: 22
+          CidrIp: '{{resolve:ssm:YOUR_ADMIN_NETWORK_PARAMETER_A:1}}'
+        - IpProtocol: tcp
+          Description: "Allow access from on-premises administrator network"
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 'YOUR_NETWORK_CIDR'
+        - IpProtocol: tcp
+          Description: "Allow access from contingency administrator network"
+          FromPort: 22
+          ToPort: 22
+          CidrIp: '{{resolve:ssm:YOUR_ADMIN_NETWORK_PARAMETER_B:1}}'
+      Tags:
+        - Key: Name
+          Value:  !Join ["", [!Ref 'AWS::StackName' , "-privileged-access"]]
+
+# Security Group for ALB APP
+  rSecurityGroupAlbAPP:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: security group para el ALB
+      GroupName: !Join ["", [!Ref 'AWS::StackName' , "-alb"]]
+      SecurityGroupIngress:
+
+        ############IP para consumo directo de desde desbloqueo e integración
+
+
+        - CidrIp: !FindInMap [EnvironmentIPs, !Ref pEnvironment, IntegracionEKS ]
+          Description: Acceso desde broker IA integracion
+          FromPort: 443
+          ToPort: 443
+          IpProtocol: tcp
+
+        - CidrIp: !FindInMap [EnvironmentIPs, !Ref pEnvironment, integracionPODs ]
+          Description: Acceso desde PODS broker IA Integracion
+          FromPort: 443
+          ToPort: 443
+          IpProtocol: tcp
+
+        - CidrIp: !FindInMap [EnvironmentIPs, !Ref pEnvironment, IntegracionKube ]
+          Description: Acceso desde kubernetes broker IA Integracion
+          FromPort: 443
+          ToPort: 443
+          IpProtocol: tcp
+
+        - CidrIp: !FindInMap [EnvironmentIPs, !Ref pEnvironment, ApiConnectV5 ]
+          Description: Acceso desde Api Connect version 5 instancias
+          FromPort: 443
+          ToPort: 443
+          IpProtocol: tcp
+
+        - CidrIp: !FindInMap [EnvironmentIPs, !Ref pEnvironment, balanceadorOnPremise ]
+          Description: Acceso desde Api Connect version 5 balanceador
+          FromPort: 443
+          ToPort: 443
+          IpProtocol: tcp
+
+        - IpProtocol: tcp
+          SourceSecurityGroupId: !Sub "{{resolve:ssm:/YOUR_CLUSTER_SECURITY_GROUP_PARAMETER}}"
+          FromPort: 443
+          ToPort: 443
+          Description: Allow access to the EKS APP from int LoadBalancer
+
+
+        #########IP para consumo directo de push
+
+        - IpProtocol: tcp
+          FromPort: 2195
+          ToPort: 2195
+          CidrIp: 17.0.0.0/8
+          Description: Acceso push ios
+        - IpProtocol: tcp
+          FromPort: 2197
+          ToPort: 2197
+          CidrIp: 17.0.0.0/8
+          Description: Acceso push ios
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 17.0.0.0/8
+          Description: Acceso push ios
+
+      Tags:
+        - Key: Name
+          Value:  !Join ["", [!Ref 'AWS::StackName' , "-alb"]]
+        # - Key: organization:application-code
+        #   Value: "YOUR_APP_CODE"
+        - Key: organization:project-name
+          Value: "YOUR_PROJECT_NAME"
+        # - Key: organization:cost-center
+        #   Value: "YOUR_COST_CENTER"
+        - Key: organization:pmo
+          Value: "YOUR_PROJECT_ID"
+        - Key: organization:business-service
+          Value: "YOUR_BUSINESS_SERVICE"
+      VpcId:
+        Fn::ImportValue: DefaultVPCId
+
+
+  rSecurityGroupASG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow access to EC2 Linux
+      GroupName: !Join ["", [!Ref 'AWS::StackName' , "-asg"]]
+      VpcId:
+        Fn::ImportValue: DefaultVPCId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          SourceSecurityGroupId: !Ref rSecurityGroupAlbAPP
+          FromPort: 8443
+          ToPort: 8443
+          Description: Allow access to the EC2 APP from int LoadBalancer
+        - IpProtocol: tcp
+          SourceSecurityGroupId: !Ref rSecurityGroupAlbWAF
+          FromPort: 8443
+          ToPort: 8443
+          Description: Allow access to the EC2 APP from ext LoadBalancer
+        - IpProtocol: tcp
+          FromPort: 8834
+          ToPort: 8834
+          CidrIp: YOUR_NETWORK_CIDR
+          Description: Allow tcp access to the EC2 application from security scanner
+        - IpProtocol: tcp
+          FromPort: 8834
+          ToPort: 8834
+          CidrIp: YOUR_NETWORK_CIDR
+          Description: Allow tcp access to the EC2 application from security scanner
+
+        - IpProtocol: 17
+          FromPort: 8834
+          ToPort: 8834
+          CidrIp: YOUR_NETWORK_CIDR
+          Description: Allow udp access to the EC2 application from security scanner
+        - IpProtocol: 17
+          FromPort: 8834
+          ToPort: 8834
+          CidrIp: YOUR_NETWORK_CIDR
+          Description: Allow udp access to the EC2 application from security scanner
+
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: YOUR_NETWORK_CIDR
+          Description: Acceso systems management service a la EC2
+        - IpProtocol: tcp
+          FromPort: 10123
+          ToPort: 10123
+          CidrIp: YOUR_NETWORK_CIDR
+          Description: Acceso systems management service a la EC2
+        - IpProtocol: tcp
+          FromPort: 445
+          ToPort: 445
+          CidrIp: YOUR_NETWORK_CIDR
+          Description: Acceso systems management service a la EC2
+
+        - IpProtocol: tcp
+          CidrIp: YOUR_NETWORK_CIDR
+          FromPort: 1414
+          ToPort: 1418
+          Description: Allow access to the EC2 APP from MQ Servers
+        - IpProtocol: tcp
+          CidrIp: YOUR_NETWORK_CIDR
+          FromPort: 1414
+          ToPort: 1418
+          Description: Allow access to the EC2 APP from MQ Servers
+
+        - IpProtocol: tcp
+          FromPort: 2195
+          ToPort: 2195
+          CidrIp: 17.0.0.0/8
+          Description: Acceso push ios
+        - IpProtocol: tcp
+          FromPort: 2197
+          ToPort: 2197
+          CidrIp: 17.0.0.0/8
+          Description: Acceso push ios
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 17.0.0.0/8
+          Description: Acceso push ios
+
+
+
+      Tags:
+      - Key: Name
+        Value:  !Join ["", [!Ref 'AWS::StackName' , "-asg"]]
+
+  rIngressSecurityGroupASG:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId:
+        Ref: rSecurityGroupASG
+      IpProtocol: -1
+      SourceSecurityGroupId:
+        Ref: rSecurityGroupASG
+      Description: "Same Acces Resource all traffic"
+
+ # Security Group for ALB WAF
+  rSecurityGroupAlbWAF:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: security group para el WAF
+      GroupName: !Join ["", [!Ref 'AWS::StackName' , "-waf"]]
+      SecurityGroupIngress:
+        - CidrIp: 199.83.128.0/21
+          Description: Acceso externo
+          FromPort: 443
+          ToPort: 443
+          IpProtocol: tcp
+        - CidrIp: 198.143.32.0/19
+          Description: Acceso externo
+          FromPort: 443
+          ToPort: 443
+          IpProtocol: tcp
+        - CidrIp: 149.126.72.0/21
+          Description: Acceso externo
+          FromPort: 443
+          ToPort: 443
+          IpProtocol: tcp
+        - CidrIp: 103.28.248.0/22
+          Description: Acceso externo
+          FromPort: 443
+          ToPort: 443
+          IpProtocol: tcp
+        - CidrIp: 45.64.64.0/22
+          Description: Acceso externo
+          FromPort: 443
+          ToPort: 443
+          IpProtocol: tcp
+        - CidrIp: 185.11.124.0/22
+          Description: Acceso externo
+          FromPort: 443
+          ToPort: 443
+          IpProtocol: tcp
+        - CidrIp: 192.230.64.0/18
+          Description: Acceso externo
+          FromPort: 443
+          ToPort: 443
+          IpProtocol: tcp
+        - CidrIp: 107.154.0.0/16
+          Description: Acceso externo
+          FromPort: 443
+          ToPort: 443
+          IpProtocol: tcp
+        - CidrIp: 45.60.0.0/16
+          Description: Acceso externo
+          FromPort: 443
+          ToPort: 443
+          IpProtocol: tcp
+        - CidrIp: 45.223.0.0/16
+          Description: Acceso externo
+          FromPort: 443
+          ToPort: 443
+          IpProtocol: tcp
+        - CidrIp: 131.125.128.0/17
+          Description: Acceso externo
+          FromPort: 443
+          ToPort: 443
+          IpProtocol: tcp
+
+      Tags: 
+        - Key: Name
+          Value:  !Join ["", [!Ref 'AWS::StackName' , "-waf"]]
+        # - Key: organization:application-code
+        #   Value: "YOUR_APP_CODE"
+        - Key: organization:project-name
+          Value: "YOUR_PROJECT_NAME"
+        # - Key: organization:cost-center
+        #   Value: "YOUR_COST_CENTER"
+        - Key: organization:pmo
+          Value: "YOUR_PROJECT_ID"
+        - Key: organization:business-service
+          Value: "YOUR_BUSINESS_SERVICE"
+      VpcId: 
+        Fn::ImportValue: DefaultVPCId       
+
+# Parameter Store entry for the administrator security group
+  rCyberarkSecurityGroupParameterStore:
+    DependsOn: rCyberArkSecurityGroup
+    Type: AWS::SSM::Parameter
+    Properties:
+        Description: Administrator security group ID
+        Type: String
+        Name: !Join ["-", [!Ref 'AWS::StackName', "privileged-access"]]
+        Value:
+            Ref: rCyberArkSecurityGroup
+
+# Parameter Store SG ALB
+  rSecurityGroupALBParameterStore:
+    Type: AWS::SSM::Parameter
+    Properties:
+        Description: Id security group ALB
+        Type: String
+        Name: !Join ["-", [!Ref 'AWS::StackName', "alb"]]
+        Value:
+            Ref: rSecurityGroupAlbAPP
+
+# Parameter Store SG ASG
+  rSecurityGroupASGParameterStore:
+    Type: AWS::SSM::Parameter
+    Properties:
+        Description: Id security group ASG
+        Type: String
+        Name: !Join ["-", [!Ref 'AWS::StackName', "asg"]]
+        Value:
+            Ref: rSecurityGroupASG
+
+# Parameter Store SG WAF
+  rSecurityGroupWAFParameterStore:
+    Type: AWS::SSM::Parameter
+    Properties:
+        Description: Id security group WAF
+        Type: String
+        Name: !Join ["-", [!Ref 'AWS::StackName', "waf"]]
+        Value:
+            Ref: rSecurityGroupAlbWAF
+
+
+Outputs:
+  oCyberArkSecurityGroup:
+    Description: Security group created for administrator access
+    Value:
+      Ref: rCyberArkSecurityGroup
+
+  oSecurityGroupALB:
+    Description: Id security group ALB.
+    Value:
+      Ref: rSecurityGroupAlbAPP
+
+  oSecurityGroupASG:
+    Description: Id security group.
+    Value:
+      Ref: rSecurityGroupASG
+
+  oSecurityGroupWAF:
+    Description: Id security group WAF.
+    Value:
+      Ref: rSecurityGroupAlbWAF
+
+  #rIngressPUSH:
+    #Type: AWS::EC2::SecurityGroupIngress
+    #Condition: cNotPdnEnv #Evita despliegue en PDN
+    #Properties:
+      #GroupId: !Ref rSecurityGroupAlbAPP
+      #SecurityGroupIngress:
+        #- CidrIp: 17.0.0.0/8
+          #Description: Acceso externo
+          #FromPort: 2195
+          #ToPort: 2195
+          #IpProtocol: -1
+        #- CidrIp: 17.0.0.0/8
+          #Description: Acceso externo
+          #FromPort: 2197
+          #ToPort: 2197
+          #IpProtocol: -1

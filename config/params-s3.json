@@ -1,0 +1,46 @@
+[
+  {
+    "ParameterKey": "pAppBucketName",
+    "ParameterValue": "#{s3-bucket}#"
+  },
+  {
+    "ParameterKey": "pALBLogsBucketName",
+    "ParameterValue": "#{s3-bucket-logs-alb}#"
+  },
+  {
+    "ParameterKey": "pImportBase",
+    "ParameterValue": "#{application-code}#-#{project-name}#-#{env}#"
+  },
+  {
+    "ParameterKey": "pPSKMS",
+    "ParameterValue": "#{ps-kms}#"
+  },
+    {
+    "ParameterKey": "pEnvironment",
+    "ParameterValue": "#{env}#"
+  },
+  {
+    "ParameterKey": "pAccessControl",
+    "ParameterValue": "#{s3-access-control}#"
+  },
+  {
+    "ParameterKey": "pS3SFTPRol",
+    "ParameterValue": "#{sftp-rol-bucket}#"
+  },
+  {
+    "ParameterKey": "pS3DayCycle",
+    "ParameterValue": "#{s3-day-cycle}#"
+  },
+  {
+    "ParameterKey": "pS3NotCurrentDays",
+    "ParameterValue": "#{s3-not-current-days}#"
+  },
+  {
+    "ParameterKey": "pS3DayCycleLogs",
+    "ParameterValue": "#{s3-day-cycle-logs}#"
+  },
+  {
+    "ParameterKey": "pS3NotCurrentDaysLogs",
+    "ParameterValue": "#{s3-not-current-days-logs}#"
+  }
+]

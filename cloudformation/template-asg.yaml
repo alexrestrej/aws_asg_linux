@@ -1,0 +1,980 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  Creates an Auto Scaling Group for reference architecture
+
+Parameters:
+  pASGSubnets:
+    Description: Application AutoScalingGroup Subnets
+    Type: String
+
+  pASGminSize:
+    Description: Minimum expected in the Autoscaling group
+    Type: String
+
+  pASGmaxSize:
+    Description: Maximum expected in the Autoscaling group
+    Type: String
+
+  pASGdesiredSize:
+    Description: Maximum expected in the Autoscaling group
+    Type: String
+
+  pScaleUpWaitTime:
+    Description: The time in seconds to wait to generate the next scale action
+    Type: String
+    MinLength: 1
+
+  pAppBucketName:
+    Type: String
+    Description: The S3 bucket name that contains the resources.
+
+  pCertificadosBucketName:
+    Type: String
+    Description: The S3 bucket name that contains the certificates.
+
+  pInstanceType:
+    Description: EC2 instance type
+    Type: String
+    AllowedValues: [ t3.nano, t3.micro, t3.small, t3.medium, t3.large, m5.large, m5.xlarge, m5dn.xlarge, m5dn.large, m6i.xlarge, m6i.2xlarge ]
+    ConstraintDescription: must be a valid EC2 instance type
+
+  pDelayTimeEC2:
+    Type: Number
+    Description: Delay para inicio de las instancias EC2 (garantizar reinicio escalonado).
+    Default: 60
+
+  pExecuteRestart:
+    Type: String
+    Description: Flag para habilitar reinicio.
+    Default: false
+
+  pAMI:
+    Type: String
+
+  pCustomKMS:
+    Description: Custom KMS for shared services
+    Type: String
+
+  pVolumeSDA1:
+    Description: Volume size SO
+    Type: String
+
+  pPSKMS:
+    Description: KMS value in the Parameter Store
+    Type: String
+
+  pPSKMSARN:
+    Description: KMS value in the Parameter Store
+    Type: String
+
+  pPSHTTPSTG:
+    Description: Target Group  value in the Parameter Store
+    Type: String
+
+  pPSHTTPSTGExt:
+    Description: Target Group  value in the Parameter Store
+    Type: String
+
+  pPSSGASG:
+    Description: ASG SG value in the Parameter Store
+    Type: String
+
+  pPSSGCA:
+    Description: privileged access service SG value in the Parameter Store
+    Type: String
+
+  pSecretManagerDBPassARN:
+    Description: The ARN of the secret that contains the password of database
+    Type: String
+
+  pSecretManagerSMPassARN:
+    Description: The ARN of the secret that contains the password of sm
+    Type: String
+
+  pImportBase:
+    Description: Name base for the resources of this stack
+    Type: String
+
+  pUrlPush:
+    Description: Parámetro de enlace de certificado push
+    Type: String
+
+  pDomain:
+    Description: Domain AD for join to domain
+    Type: String
+
+  pEnvironment:
+    Description: Environment
+    Type: String
+
+  pSiteDNSName:
+    Description: DNS Site Name
+    Type: String
+
+  pServernameApp:
+    Description: Server app dns name
+    Type: String
+
+  pEC2InstanceRoleName:
+    Description: EC2 Instance Role
+    Type: String
+
+  pClusterMode:
+    Description: EC2 Cluster Mode
+    Type: String
+
+  plogSize:
+    Description: EC2 limit for log size
+    Type: String
+
+  pMemory:
+    Description: EC2 limit for memory
+    Type: String
+
+  pS3LogsALB:
+    Type: String
+    Description: The S3 bucket name that contains ALB logs.
+
+  pDeploymentgroupname:
+    Type: String
+    Description: Deployment Group for AZ Agent.
+
+  pUser:
+    Type: String
+    Description: User for AZ Agent.
+
+  pDeploymentgroupPath:
+    Type: String
+    Description: Path for AZ Agent.
+
+  pDBDns:
+    Type: String
+    Description: Database dns.
+
+  pDBPort:
+    Type: String
+    Description: Database port.
+
+  pDBName:
+    Type: String
+    Description: Database name.
+
+  pDBUser:
+    Type: String
+    Description: Database user.
+
+  pDBPass:
+    Type: String
+    Description: Database password.
+
+  pNtpServer:
+    Type: String
+    Description: NTP Server.
+
+  pKSname:
+    Type: String
+    Description: Tomcat Keystore name.
+
+  pEnrollURL:
+    Type: String
+    Description: URL mobile enroll.
+
+  pBTPass:
+    Type: String
+    Description: Bastion user password.
+
+  pJavaVersion:
+    Type: String
+    Description: Version de java compatible con el producto
+
+  pIgniteRefeInitial:
+    Type: String
+    Description: Ignite reference data initial size.
+
+  pIgniteRefeMaxSite:
+    Type: String
+    Description: Ignite reference data max size.
+
+  pIgniteTransInitial:
+    Type: String
+    Description: Ignite transactional data initial size.
+
+  pIgniteTransMaxSite:
+    Type: String
+    Description: Ignite transactional data max size.
+
+  pPythonVersion:
+    Type: String
+    Description: Python version for lambda.
+
+  ## Parametros Certificados
+  pCerPkiArn:
+    Description: ARN of the SNS topic used to request a PKI Certificate
+    Type: String
+    AllowedValues:
+      - arn:aws:sns:us-east-1:YOUR_AWS_ACCOUNT_ID:pki-qa # DEV y QA
+      - arn:aws:sns:us-east-1:YOUR_AWS_ACCOUNT_ID:pki-pdn # PDN
+  pCerCommonName01:
+    Description: Digital Certificate CommonNamesns
+    Type: String
+  pCerSans01:
+    # Este parámetro no es obligatorio
+    Description: Optional Digital Certificate SANS
+    Type: String # Lista de nombres alternativos serpadas por ',' sin espacios
+
+  ## IPs para cluster de la aplicación
+
+
+  ## Parametros application monitoring service
+  pEnableDynatrace:
+    Description: Parámetro que determina la instalación de application monitoring service ("true" para instalarlo)
+    Type: String
+
+  pApplicationCode:
+    Description: Código AW de la aplicación.
+    Type: String
+
+  pProjectName:
+    Description: Nombre del proyecto.
+    Type: String
+
+  ## Certificados para EC2
+
+  pCertificateInt1:
+    Description: Certificado interno para DID.
+    Type: String
+
+  pCertificateInt2:
+    Description: Certificado interno para DID.
+    Type: String
+
+  pCertificateExt:
+    Description: Certificado interno para DID.
+    Type: String
+
+Conditions:
+  enableCustomKMS: !Not [ !Equals [ !Ref pCustomKMS, "" ] ]
+
+  Production:
+    Fn::Equals: [ !Ref pEnvironment, "pdn" ]
+
+  NotDevEnv:
+    Fn::Or:
+      - Fn::Equals: [ { Ref: pEnvironment }, "qa" ]
+      - Fn::Equals: [ { Ref: pEnvironment }, "pdn" ]
+
+Resources:
+
+  rEC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/YOUR_GOVERNANCE_BOUNDARY_POLICY
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+
+        - PolicyName: LambdaInvokePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action: "lambda:InvokeFunction"
+                Resource:
+                  - !Join [ "", [ "arn:aws:lambda:", !Ref 'AWS::Region', ":", !Ref 'AWS::AccountId', ":function:YOUR_APP_CODE-YOUR_PROJECT_NAME-", !Ref pEnvironment, "-list-ips" ] ]
+
+        - PolicyName: ec2tags
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - ec2:Describe
+                  - ec2:CreateTags
+                Resource:
+                  - !Join [ "", [ "arn:aws:ec2:", !Ref 'AWS::Region', ":", !Ref 'AWS::AccountId', ":instance/*" ] ] # arn:aws:ec2:*:*:*
+                Effect: Allow
+
+        - PolicyName: createSSMAssociationEC2
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - ssm:CreateAssociation
+                Resource:
+                  - !Join [ "", [ "arn:aws:ec2:", !Ref 'AWS::Region', ":", !Ref 'AWS::AccountId', ":instance/*" ] ] # arn:aws:ec2:*:*:*
+                Effect: Allow
+
+        - PolicyName: createSSMAssociation
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - ssm:CreateAssociationDocument
+                Resource:
+                  - !Join [ "", [ "arn:aws:ssm:", !Ref 'AWS::Region', ":", !Ref 'AWS::AccountId', ":document/*" ] ] # arn:aws:ssm:*:*:*
+                Effect: Allow
+
+        - PolicyName: GetMetrics-CW
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - cloudwatch:PutMetricAlarm
+                  - cloudwatch:TagResource
+                  - cloudwatch:UntagResource
+                  - cloudwatch:DescribeAlarms
+                  - cloudwatch:DescribeAlarmHistory
+                  - cloudwatch:ListDashboards
+                  - cloudwatch:PutDashboard
+                  - cloudwatch:PutMetricData
+                  - cloudwatch:PutMetricStream
+                  - cloudwatch:DeleteAlarms
+                Resource:
+                  - !Join [ "", [ "arn:aws:ec2:", !Ref 'AWS::Region', ":", !Ref 'AWS::AccountId', ":instance/*" ] ] # arn:aws:ec2:*:*:*
+                  - !Join [ "", [ "arn:aws:ssm:", !Ref 'AWS::Region', ":", !Ref 'AWS::AccountId', ":document/*" ] ] # arn:aws:ssm:*:*:*
+                  - !Join [ "", [ "arn:aws:elasticloadbalancing:", !Ref 'AWS::Region', ":", !Ref 'AWS::AccountId', ":loadbalancer/app/*" ] ] # arn:aws:elasticloadbalancing:*:*:*
+                Effect: Allow
+
+        - PolicyName: allow-get-objects-from-DCM-bucket
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - s3:GetObject
+                Resource:
+                  Fn::Join: [ "", [ "arn:aws:s3:::", !If [ Production, dcm-shared-s3-monitoreo-de-ti, dcm-shared-non-prod-s3-monitoreo-de-ti ], '/*' ] ]
+                Effect: Allow
+
+      RoleName: !Ref pEC2InstanceRoleName
+
+  rS3Policy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: VisualEditor0
+            Effect: Allow
+            Action:
+              - s3:Get
+              - s3:Put
+              - s3:List
+            Resource:
+              - Fn::Sub: arn:aws:s3:::${pImportBase}-certificados
+              - Fn::Sub: arn:aws:s3:::${pImportBase}-recursos
+              - Fn::Sub: arn:aws:s3:::${pImportBase}-s3-logs-alb
+              - Fn::Sub: arn:aws:s3:::${pImportBase}-s3-rds
+      PolicyName: !Join [ "", [ !Ref 'AWS::StackName', "-s3-policy" ] ]
+      Roles:
+        - !Ref rEC2InstanceRole
+
+  rCutomKMSPolicy:
+    Type: 'AWS::IAM::Policy'
+    Condition: enableCustomKMS
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: VisualEditor0
+            Effect: Allow
+            Action:
+              - kms:GenerateDataKey
+              - kms:Decrypt
+            Resource:
+              - !Ref pCustomKMS
+      PolicyName: !Join [ "", [ !Ref 'AWS::StackName', "-kms-shared-policy" ] ]
+      Roles:
+        - !Ref rEC2InstanceRole
+
+  rKMSPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: VisualEditor0
+            Effect: Allow
+            Action:
+              - kms:GenerateDataKey
+              - kms:Decrypt
+            Resource:
+              - !Join [ "", [ "arn:aws:kms:", !Ref 'AWS::Region', ":", !Ref 'AWS::AccountId', ":key/*" ] ]
+      PolicyName: !Join [ "", [ !Ref 'AWS::StackName', "-kms-policy" ] ]
+      Roles:
+        - !Ref rEC2InstanceRole
+
+  rACMPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: VisualEditor0
+            Effect: Allow
+            Action:
+              - acm:GetCertificate
+            Resource:
+              - !Join [ "", [ "arn:aws:acm:", !Ref 'AWS::Region', ":", !Ref 'AWS::AccountId', ":certificate/", !Ref pCertificateInt1 ] ]
+              - !Join [ "", [ "arn:aws:acm:", !Ref 'AWS::Region', ":", !Ref 'AWS::AccountId', ":certificate/", !Ref pCertificateInt2 ] ]
+              - !Join [ "", [ "arn:aws:acm:", !Ref 'AWS::Region', ":", !Ref 'AWS::AccountId', ":certificate/", !Ref pCertificateExt ] ]
+      PolicyName: !Join [ "", [ !Ref 'AWS::StackName', "-acm-policy" ] ]
+      Roles:
+        - !Ref rEC2InstanceRole
+
+  rDeploymentGroupPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName:
+        Fn::Join: [ "-", [ { Ref: 'AWS::StackName' }, "policy-DeploymentGroup" ] ]
+      Roles:
+        - !Ref rEC2InstanceRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Resource:
+              - arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/YOUR_DEPLOYMENT_GROUP_ROLE
+            Effect: Allow
+
+  rSecretPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: VisualEditor0
+            Effect: Allow
+            Action:
+              - 'secretsmanager:DescribeSecret'
+              - 'secretsmanager:GetRandomPassword'
+              - 'secretsmanager:GetResourcePolicy'
+              - 'secretsmanager:GetSecretValue'
+              - 'secretsmanager:ListSecretVersionIds'
+              - 'secretsmanager:ListSecrets'
+              #- 'secretsmanager:PutResourcePolicy'
+            Resource:
+              - !Join [ "", [ "arn:aws:secretsmanager:", !Ref "AWS::Region", ":", !Ref "AWS::AccountId", ":", "secret:", !Ref pSecretManagerDBPassARN ] ]
+              - !Ref SecretCertificateEC201
+              - !Join [ "", [ "arn:aws:secretsmanager:", !Ref "AWS::Region", ":", !Ref "AWS::AccountId", ":", "secret:", !Ref pSecretManagerSMPassARN ] ]
+      PolicyName: !Join [ "", [ !Ref 'AWS::StackName', "-secret-policy" ] ]
+      Roles:
+        - !Ref rEC2InstanceRole
+
+  rEC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - Ref: rEC2InstanceRole
+
+  ## Certificado Digital 01 - KMS
+  KMSKeyCertificate01:
+    Type: AWS::KMS::Key
+    Properties:
+      Enabled: True
+      EnableKeyRotation: True
+      PendingWindowInDays: 30
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Join [ '', [ 'arn:', !Ref 'AWS::Partition', ':iam::', !Ref 'AWS::AccountId', ':root' ] ]
+            Action: kms:*
+            Resource: "*"
+          - Effect: Allow
+            Principal:
+              AWS:
+                - !Join [ '', [ 'arn:', !Ref 'AWS::Partition', ':iam::', !Ref 'AWS::AccountId', ':role/pki' ] ]
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey
+            Resource: "*"
+            Condition:
+              StringEquals:
+                kms:ViaService: !Join [ '', [ 'secretsmanager.', !Ref 'AWS::Region', '.amazonaws.com' ] ]
+          - Effect: Allow
+            Principal:
+              AWS:
+                - !GetAtt rEC2InstanceRole.Arn
+                - !Sub arn:aws:iam::${AWS::AccountId}:role/YOUR_CLOUDFORMATION_DEPLOYMENT_ROLE
+            Action:
+              - kms:Decrypt
+            Resource: "*"
+            Condition:
+              StringEquals:
+                kms:ViaService: !Join [ '', [ 'secretsmanager.', !Ref 'AWS::Region', '.amazonaws.com' ] ]
+
+  ## Certificado Digital 01 - SecretsManager
+  SecretCertificateEC201:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      KmsKeyId: !Ref KMSKeyCertificate01
+      SecretString: ' '
+
+  SecretsManagerResourcePolicyCertificateEC201:
+    Type: AWS::SecretsManager::ResourcePolicy
+    Properties:
+      ResourcePolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Join
+                - ''
+                - - 'arn:'
+                  - !Ref AWS::Partition
+                  - ':iam::'
+                  - !Ref AWS::AccountId
+                  - ':role/pki'
+            Action: secretsmanager:PutSecretValue
+            Resource: !Ref SecretCertificateEC201
+            Condition:
+              Bool:
+                aws:SecureTransport: 'true'
+
+          - Effect: Allow
+            Principal:
+              AWS:
+                - !GetAtt rEC2InstanceRole.Arn
+                - arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_YOUR_ROLE_NAME
+                - !Sub arn:aws:iam::${AWS::AccountId}:role/YOUR_CLOUDFORMATION_DEPLOYMENT_ROLE
+            Action: secretsmanager:GetSecretValue
+            Resource: !Ref SecretCertificateEC201
+            Condition:
+              Bool:
+                aws:SecureTransport: 'true'
+
+          - Effect: Deny
+            Principal:
+              AWS: "*"
+            Action: secretsmanager:GetSecretValue
+            Resource: "*"
+            Condition:
+              StringNotEquals:
+                aws:PrincipalArn:
+                  - !GetAtt rEC2InstanceRole.Arn
+                  - arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_YOUR_ROLE_NAME
+                  - !Sub arn:aws:iam::${AWS::AccountId}:role/YOUR_CLOUDFORMATION_DEPLOYMENT_ROLE
+
+      SecretId: !Ref SecretCertificateEC201
+
+  ## Certificado Digital 01 - InternalDigitalCertificate
+  InternalCertificateEC201:
+    DependsOn:
+      - SecretsManagerResourcePolicyCertificateEC201
+    Type: Custom::InternalDigitalCertificate
+    Properties:
+      ServiceToken: !Ref pCerPkiArn
+      common_name: !Ref pCerCommonName01
+      subject_alternative_names: !Ref pCerSans01 # Este parámetro no es obligatorio
+      aws_service: EC2
+      key_type: RSA2048
+      secret_arn: !Ref SecretCertificateEC201
+
+  rAllInstanceIdsAssociationLinux:
+    Type: AWS::SSM::Association
+    Properties:
+      Name: arn:aws:ssm:us-east-1:YOUR_AWS_ACCOUNT_ID:document/YOUR_DEPLOYMENT_GROUP_DOCUMENT
+      Parameters:
+        deploymentgroupname:
+          - !Ref pDeploymentgroupname
+        user:
+          - !Ref pUser
+        installationpath:
+          - !Ref pDeploymentgroupPath
+        environment:
+          - !Ref pEnvironment
+      OutputLocation:
+        S3Location:
+          OutputS3BucketName: !Ref pS3LogsALB
+          OutputS3KeyPrefix: 'logslnx/'
+      Targets:
+        - Key: tag:aws:cloudformation:stack-name
+          Values:
+            - !Ref AWS::StackName
+      WaitForSuccessTimeoutSeconds: 300
+
+  ###########################  ASG Y LC #########################
+  rEC2LaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      InstanceMonitoring: true
+      InstanceType:
+        Ref: pInstanceType
+      SecurityGroups:
+        - !Join [ "", [ "{{resolve:ssm:", !Ref pPSSGASG, "}}" ] ]
+        - !Join [ "", [ "{{resolve:ssm:", !Ref pPSSGCA, "}}" ] ]
+      ImageId:
+        Ref: pAMI
+      IamInstanceProfile:
+        Ref: rEC2InstanceProfile
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            Encrypted: true
+            VolumeSize: !Ref pVolumeSDA1
+            VolumeType: gp3
+      AssociatePublicIpAddress: false
+      MetadataOptions:
+        #HttpEndpoint: String
+        #HttpPutResponseHopLimit: Integer
+        HttpTokens: required
+      UserData:
+        ## Actual Version 10.0.1
+        Fn::Base64: !Sub
+          - |
+            #!/bin/bash
+            #chronyconfig
+            aws s3 cp s3://${AppBucketName}/App/site/chronyconfig.sh /var/tmp/chronyconfig.sh
+            chmod +x /var/tmp/chronyconfig.sh
+            /var/tmp/chronyconfig.sh "${ntpserver}"
+            # Create the application service account
+            groupadd grpYOUR_PROJECT_NAME
+            useradd -g grpYOUR_PROJECT_NAME -d /home/YOUR_APP_SERVICE_USER -m -s /bin/bash -c "Application service account" YOUR_APP_SERVICE_USER
+            sed -i '$a %grpYOUR_PROJECT_NAME ALL=(ALL) NOPASSWD:ALL' /etc/sudoers
+            set -x
+            #app
+            aws s3 cp s3://${AppBucketName}/App/site/temurin-17-jdk-17.0.15.0.0.6-0.x86_64.rpm /var/tmp/
+            aws s3 cp s3://${AppBucketName}/App/site/keystore.jks /root/
+            yum -y update --exclude=java*
+            yum -y install /var/tmp/temurin-17-jdk-17.0.15.0.0.6-0.x86_64.rpm
+            yum -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+            yum install -y jq
+            yum install -y vim
+            #repo
+            aws s3 cp s3://${AppBucketName}/App/site/YOUR_PROJECT_NAME.zip /var/tmp/
+            unzip /var/tmp/YOUR_PROJECT_NAME.zip -d /var/YOUR_PROJECT_NAME/
+            rm -rf /var/YOUR_PROJECT_NAME/database_scripts/
+            rm -rf /var/YOUR_PROJECT_NAME/extensions/
+            #Reg
+            aws configure set default.region ${AWS::Region}
+            #CA
+            aws secretsmanager get-secret-value --secret-id ${_certificateSecret} | jq --raw-output .SecretString | jq -r .cer > /etc/pki/tls/certs/certificate.cer
+            aws secretsmanager get-secret-value --secret-id ${_certificateSecret} | jq --raw-output .SecretString | jq -r .chain > /etc/pki/tls/certs/chain.cer
+            aws secretsmanager get-secret-value --secret-id ${_certificateSecret} | jq --raw-output .SecretString | jq -r .key > /etc/pki/tls/certs/encrypted_private.key
+            #keystore
+            KEYSTORE_PASSPHRASE="$(aws secretsmanager get-secret-value --secret-id ${_certificateSecret} | jq --raw-output .SecretString | jq -r .passphrase)"
+            # YOUR_PROJECT_NAME-server-environment Properties
+            sed -i "/memory_max=.*/c\memory_max=${Memory}" /var/YOUR_PROJECT_NAME/application/conf/YOUR_PROJECT_NAME-server-environment.properties
+            sed -i "/https_connection_enabled=/c\https_connection_enabled=true" /var/YOUR_PROJECT_NAME/application/conf/YOUR_PROJECT_NAME-server-environment.properties
+            sed -i "/https_keystore_path=/c\https_keystore_path=/root/${keystorename}" /var/YOUR_PROJECT_NAME/application/conf/YOUR_PROJECT_NAME-server-environment.properties
+            sed -i "/https_keystore_password=/c\https_keystore_password=$(echo $KEYSTORE_PASSPHRASE)" /var/YOUR_PROJECT_NAME/application/conf/YOUR_PROJECT_NAME-server-environment.properties
+            sed -i "/https_keystore_type=/c\https_keystore_type=JKS" /var/YOUR_PROJECT_NAME/application/conf/YOUR_PROJECT_NAME-server-environment.properties
+            sed -i "/https_ssl_protocol=.*/c\https_ssl_protocol=TLSv1.2" /var/YOUR_PROJECT_NAME/application/conf/YOUR_PROJECT_NAME-server-environment.properties
+            sed -i "/logs_configuration_maxSize=.*/c\logs_configuration_maxSize=${logSize}" /var/YOUR_PROJECT_NAME/application/conf/YOUR_PROJECT_NAME-server-environment.properties
+            sed -i "/deployment_enable_scheduled_tasks=.*/c\deployment_enable_scheduled_tasks=false" /var/YOUR_PROJECT_NAME/application/conf/YOUR_PROJECT_NAME-server-environment.properties
+            sed -i "/memory_max=.*/c\memory_max=${Memory}" /var/YOUR_PROJECT_NAME/application/conf/YOUR_PROJECT_NAME-server-environment.properties
+            #cnfProperties
+            sed -i "/database.host=/c\database.host=${dbdns}" /var/YOUR_PROJECT_NAME/application/webapps/detect/WEB-INF/configuration.properties
+            sed -i "/database.port=/c\database.port=${dbport}" /var/YOUR_PROJECT_NAME/application/webapps/detect/WEB-INF/configuration.properties
+            sed -i "/database.name=/c\database.name=${dbname}" /var/YOUR_PROJECT_NAME/application/webapps/detect/WEB-INF/configuration.properties
+            sed -i "/database.user=/c\database.user=${dbuser}" /var/YOUR_PROJECT_NAME/application/webapps/detect/WEB-INF/configuration.properties
+            sed -i "/database.password=/c\database.password=${dbpass}" /var/YOUR_PROJECT_NAME/application/webapps/detect/WEB-INF/configuration.properties
+            sed -i "s/http/https/g" /var/YOUR_PROJECT_NAME/application/webapps/detect/WEB-INF/configuration.properties
+            sed -i "s/localhost:8080/${dnsname}/g" /var/YOUR_PROJECT_NAME/application/webapps/detect/WEB-INF/configuration.properties 
+            sed -i "69s|mobile.config.url.response=.*|mobile.config.url.response=https://${url}/detect/public/rest/mobile/config/{channel}|g" /var/YOUR_PROJECT_NAME/application/webapps/detect/WEB-INF/configuration.properties
+            sed -i "75s|mobile.auth.url.template.response=.*|mobile.auth.url.template.response=https://${url}/detect/public/mobileServices.htm|g" /var/YOUR_PROJECT_NAME/application/webapps/detect/WEB-INF/configuration.properties
+            sed -i "106s|geolocation.proxy.ip_addresses.population.cronexpression.*|geolocation.proxy.ip_addresses.population.cronexpression=0 0 0 ? * SUN 2099|g" /var/YOUR_PROJECT_NAME/application/webapps/detect/WEB-INF/configuration.properties
+            #configIgnite
+            sed -i "147s|ignite.discover.localAddress=.*|ignite.discover.localAddress=$(hostname -I | cut -d' ' -f1)|g" /var/YOUR_PROJECT_NAME/application/webapps/detect/WEB-INF/configuration.properties
+            sed -i "165s|ignite.communication.localAddress=.*|ignite.communication.localAddress=$(hostname -I | cut -d' ' -f1)|g" /var/YOUR_PROJECT_NAME/application/webapps/detect/WEB-INF/configuration.properties
+            sed -i "199s|ignite.cache.dataStorage.referenceDataRegion.initialSize=.*|ignite.cache.dataStorage.referenceDataRegion.initialSize=${igniterefeinitial}|g" /var/YOUR_PROJECT_NAME/application/webapps/detect/WEB-INF/configuration.properties
+            sed -i "201s|ignite.cache.dataStorage.referenceDataRegion.maxSize=.*|ignite.cache.dataStorage.referenceDataRegion.maxSize=${igniterefemaxsite}|g" /var/YOUR_PROJECT_NAME/application/webapps/detect/WEB-INF/configuration.properties
+            sed -i "203s|ignite.cache.dataStorage.transactionalDataRegion.initialSize=.*|ignite.cache.dataStorage.transactionalDataRegion.initialSize=${ignitetransinitial}|g" /var/YOUR_PROJECT_NAME/application/webapps/detect/WEB-INF/configuration.properties
+            sed -i "205s|ignite.cache.dataStorage.transactionalDataRegion.maxSize=.*|ignite.cache.dataStorage.transactionalDataRegion.maxSize=${ignitetransmaxsite}|g" /var/YOUR_PROJECT_NAME/application/webapps/detect/WEB-INF/configuration.properties
+            #MotorBD
+            rm -rf /var/YOUR_PROJECT_NAME/application/webapps/detect/WEB-INF/web.xml
+            aws s3 cp s3://${AppBucketName}/App/site/web.xml /var/YOUR_PROJECT_NAME/application/webapps/detect/WEB-INF/
+            #Logs
+            rm -rf /var/YOUR_PROJECT_NAME/application/webapps/detect/WEB-INF/log4j2.properties
+            aws s3 cp s3://${AppBucketName}/App/site/log4j2.properties /var/YOUR_PROJECT_NAME/application/webapps/detect/WEB-INF/
+            #Config detect.Properties
+            sed -i "43s|detect.license.verification.*|detect.license.verification=0 05 23 * * ?|g" /var/YOUR_PROJECT_NAME/application/webapps/detect/WEB-INF/classes/detect.properties
+            sed -i "62s|clean.clients.report.local.path=.*|clean.clients.report.local.path=/var/YOUR_PROJECT_NAME/application/logs|g" /var/YOUR_PROJECT_NAME/application/webapps/detect/WEB-INF/classes/detect.properties
+            #PushiOS
+            sed -i "196s/mobile.push.apple.service.host=.*/mobile.push.apple.service.host=${Urlpush}/g" /var/YOUR_PROJECT_NAME/application/webapps/detect/WEB-INF/classes/detect.properties
+            sed -i "328s|soap-messages-logging=.*|soap-messages-logging=true|g" /var/YOUR_PROJECT_NAME/application/webapps/detect/WEB-INF/classes/detect.properties
+            #Webapp channels-service
+            sed -i "4s/postgres/oracle/1" /var/YOUR_PROJECT_NAME/application/webapps/microservices/channels-service/WEB-INF/classes/application.yml
+            sed -i "10s/host:.*/host: ${dbdns}/g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/channels-service/WEB-INF/classes/application.yml
+            sed -i "11s/port:.*/port: ${dbport}/g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/channels-service/WEB-INF/classes/application.yml
+            sed -i "12s/name:.*/name: ${dbname}/g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/channels-service/WEB-INF/classes/application.yml
+            sed -i "13s|user:.*|user: ${dbuser}|g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/channels-service/WEB-INF/classes/application.yml
+            sed -i "14s|password:.*|password: ${dbpass}|g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/channels-service/WEB-INF/classes/application.yml
+            #Webapp clients-service
+            sed -i "4s/postgres/oracle/1" /var/YOUR_PROJECT_NAME/application/webapps/microservices/clients-service/WEB-INF/classes/application.yml
+            sed -i "10s/host:.*/host: ${dbdns}/g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/clients-service/WEB-INF/classes/application.yml
+            sed -i "11s/port:.*/port: ${dbport}/g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/clients-service/WEB-INF/classes/application.yml
+            sed -i "12s/name:.*/name: ${dbname}/g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/clients-service/WEB-INF/classes/application.yml
+            sed -i "13s|user:.*|user: ${dbuser}|g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/clients-service/WEB-INF/classes/application.yml
+            sed -i "14s|password:.*|password: ${dbpass}|g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/clients-service/WEB-INF/classes/application.yml
+            #Webapp encryption-service
+            sed -i "4s/postgres/oracle/1" /var/YOUR_PROJECT_NAME/application/webapps/microservices/encryption-service/WEB-INF/classes/application.yml
+            sed -i "10s/host:.*/host: ${dbdns}/g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/encryption-service/WEB-INF/classes/application.yml
+            sed -i "11s/port:.*/port: ${dbport}/g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/encryption-service/WEB-INF/classes/application.yml
+            sed -i "12s/name:.*/name: ${dbname}/g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/encryption-service/WEB-INF/classes/application.yml
+            sed -i "13s|user:.*|user: ${dbuser}|g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/encryption-service/WEB-INF/classes/application.yml
+            sed -i "14s|password:.*|password: ${dbpass}|g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/encryption-service/WEB-INF/classes/application.yml
+            #Webapp mobile-auth-service
+            sed -i "4s/postgres/oracle/1" /var/YOUR_PROJECT_NAME/application/webapps/microservices/mobile-auth-service/WEB-INF/classes/application.yml
+            sed -i "10s/host:.*/host: ${dbdns}/g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/mobile-auth-service/WEB-INF/classes/application.yml
+            sed -i "11s/port:.*/port: ${dbport}/g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/mobile-auth-service/WEB-INF/classes/application.yml
+            sed -i "12s/name:.*/name: ${dbname}/g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/mobile-auth-service/WEB-INF/classes/application.yml
+            sed -i "13s|user:.*|user: ${dbuser}|g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/mobile-auth-service/WEB-INF/classes/application.yml
+            sed -i "14s|password:.*|password: ${dbpass}|g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/mobile-auth-service/WEB-INF/classes/application.yml
+            #Webapp oath-service
+            sed -i "11s|broker-url:.*|broker-url: tcp://$(hostname -I| cut -d' ' -f1):61616 |g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/oath-service/WEB-INF/classes/application.yml
+            #Webapp oob-service
+            sed -i "4s/postgres/oracle/1" /var/YOUR_PROJECT_NAME/application/webapps/microservices/oob-service/WEB-INF/classes/application.yml
+            sed -i "10s/host:.*/host: ${dbdns}/g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/oob-service/WEB-INF/classes/application.yml
+            sed -i "11s/port:.*/port: ${dbport}/g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/oob-service/WEB-INF/classes/application.yml
+            sed -i "12s/name:.*/name: ${dbname}/g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/oob-service/WEB-INF/classes/application.yml
+            sed -i "13s|user:.*|user: ${dbuser}|g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/oob-service/WEB-INF/classes/application.yml
+            sed -i "14s|password:.*|password: ${dbpass}|g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/oob-service/WEB-INF/classes/application.yml
+            #Webapp session-service
+            sed -i "4s/postgres/oracle/1" /var/YOUR_PROJECT_NAME/application/webapps/microservices/session-service/WEB-INF/classes/application.yml
+            sed -i "10s/host:.*/host: ${dbdns}/g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/session-service/WEB-INF/classes/application.yml
+            sed -i "11s/port:.*/port: ${dbport}/g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/session-service/WEB-INF/classes/application.yml
+            sed -i "12s/name:.*/name: ${dbname}/g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/session-service/WEB-INF/classes/application.yml
+            sed -i "13s|user:.*|user: ${dbuser}|g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/session-service/WEB-INF/classes/application.yml
+            sed -i "14s|password:.*|password: ${dbpass}|g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/session-service/WEB-INF/classes/application.yml
+            #Webapp tokens-service
+            sed -i "4s/postgres/oracle/1" /var/YOUR_PROJECT_NAME/application/webapps/microservices/tokens-service/WEB-INF/classes/application.yml
+            sed -i "13s|broker-url:.*|broker-url: tcp://$(hostname -I| cut -d' ' -f1):61616 |g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/tokens-service/WEB-INF/classes/application.yml
+            sed -i "17s/host:.*/host: ${dbdns}/g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/tokens-service/WEB-INF/classes/application.yml
+            sed -i "18s/port:.*/port: ${dbport}/g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/tokens-service/WEB-INF/classes/application.yml
+            sed -i "19s/name:.*/name: ${dbname}/g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/tokens-service/WEB-INF/classes/application.yml
+            sed -i "20s|user:.*|user: ${dbuser}|g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/tokens-service/WEB-INF/classes/application.yml
+            sed -i "21s|password:.*|password: ${dbpass}|g" /var/YOUR_PROJECT_NAME/application/webapps/microservices/tokens-service/WEB-INF/classes/application.yml
+            #cnfsrv
+            chmod -R 755 /var/YOUR_PROJECT_NAME/application/bin/YOUR_PROJECT_NAME.service
+            cp /var/YOUR_PROJECT_NAME/application/bin/YOUR_PROJECT_NAME.service /etc/systemd/system/
+            sed -i "9s|Environment=JAVA_HOME=.*|Environment=JAVA_HOME=/usr/lib/jvm/temurin-17-jdk|g" /etc/systemd/system/YOUR_PROJECT_NAME.service
+            sed -i "11s|Environment=CATALINA_HOME=.*|Environment=CATALINA_HOME=/var/YOUR_PROJECT_NAME/application|g" /etc/systemd/system/YOUR_PROJECT_NAME.service
+            sed -i "12s|Environment=CATALINA_PID=.*|Environment=CATALINA_PID=/var/YOUR_PROJECT_NAME/application/catalina_pid.txt|g" /etc/systemd/system/YOUR_PROJECT_NAME.service
+            sed -i "13s|Environment=CATALINA_BASE=.*|Environment=CATALINA_BASE=/var/YOUR_PROJECT_NAME/application|g" /etc/systemd/system/YOUR_PROJECT_NAME.service
+            sed -i "15s|ExecStart=.*|ExecStart=/var/YOUR_PROJECT_NAME/application/bin/startup.sh|g" /etc/systemd/system/YOUR_PROJECT_NAME.service
+            sed -i "16s|ExecStop=.*|ExecStop=/var/YOUR_PROJECT_NAME/application/bin/shutdown.sh|g" /etc/systemd/system/YOUR_PROJECT_NAME.service
+            chkconfig --add YOUR_PROJECT_NAME.service
+            chkconfig  YOUR_PROJECT_NAME.service on
+            systemctl daemon-reload
+            systemctl enable YOUR_PROJECT_NAME.service
+            systemctl start YOUR_PROJECT_NAME.service
+            systemctl status YOUR_PROJECT_NAME.service
+            #application monitoring service
+            export AGENT_DT_LOG=/var/log/dt-installation.log
+            {
+            echo "Enable application monitoring service" "${dt_deploy}"
+            if [ "${dt_deploy}" = "true" ]; then
+              aws s3 cp s3://"${dcmbucket}"/ConfigDt/InstallDt.sh /var/tmp/InstallDt.sh
+              /bin/bash /var/tmp/InstallDt.sh "${env}" "${projectcode}" "${projectname}"
+            fi
+            } | tee "$AGENT_DT_LOG"
+            #tagsvolume
+            export EC2_INSTANCE_ID="`wget -q -O - http://169.254.169.254/latest/meta-data/instance-id || die \"wget instance-id has failed: $?\"`"
+            #namebnksrv
+            echo=${standardnameserver}
+            export serial=`< /dev/urandom tr -dc a-z0-9 | head -c8; echo`
+            export servername=$(echo ${standardnameserver} | tr A-Z a-z)$serial
+            hostnamectl set-hostname $servername+.${domain}
+            nmcli connection modify System\ eth0 ipv4.dns-search ${domain},ec2.internal
+            systemctl restart systemd-hostnamed.service
+            systemctl restart NetworkManager.service
+            aws ec2 create-tags --resources $EC2_INSTANCE_ID --tags Key=organization:servername,Value=$servername
+            #USRBL
+            aws s3 cp s3://${AppBucketName}/App/site/userbastion.sh /var/tmp/userbastion.sh
+            chmod +x /var/tmp/userbastion.sh
+            /var/tmp/userbastion.sh "${btpass}"
+
+          - AppBucketName: !Ref pAppBucketName
+            standardnameserver: !Ref pServernameApp
+            Urlpush: !Ref pUrlPush
+            domain: !Ref pDomain
+            dnsname: !Ref pSiteDNSName
+            dbdns: !Ref pDBDns
+            dbport: !Ref pDBPort
+            dbname: !Ref pDBName
+            dbuser: !Ref pDBUser
+            dbpass: !Ref pDBPass
+            btpass: !Ref pBTPass
+            ntpserver: !Ref pNtpServer
+            clustermode: !Ref pClusterMode
+            logSize: !Ref plogSize
+            Memory: !Ref pMemory
+            JavaVersion: !Ref pJavaVersion
+            keystorename: !Ref pKSname
+            secretdb: !Join [ "", [ "arn:aws:secretsmanager:", !Ref "AWS::Region", ":", !Ref "AWS::AccountId", ":", "secret:", !Ref pSecretManagerDBPassARN ] ]
+            _certificateSecret: !GetAtt InternalCertificateEC201.SecretArn
+            cname_cert: !Ref pCerCommonName01
+            dcmbucket: !If [ Production, dcm-shared-s3-monitoreo-de-ti, dcm-shared-non-prod-s3-monitoreo-de-ti ]
+            env: !Ref pEnvironment
+            dt_deploy: !Ref pEnableDynatrace
+            projectcode: !Ref pApplicationCode
+            projectname: !Ref pProjectName
+            igniterefeinitial: !Ref pIgniteRefeInitial
+            igniterefemaxsite: !Ref pIgniteRefeMaxSite
+            ignitetransinitial: !Ref pIgniteTransInitial
+            ignitetransmaxsite: !Ref pIgniteTransMaxSite
+            url: !Ref pEnrollURL
+
+  rAutoScaling:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      LaunchConfigurationName: !Ref rEC2LaunchConfig
+      MinSize:
+        Ref: pASGminSize
+      MaxSize:
+        Ref: pASGmaxSize
+      DesiredCapacity:
+        Ref: pASGdesiredSize
+      TargetGroupARNs:
+        - !Join [ "", [ "{{resolve:ssm:", !Ref pPSHTTPSTGExt, "}}" ] ]
+        - !Join [ "", [ "{{resolve:ssm:", !Ref pPSHTTPSTG, "}}" ] ]
+      VPCZoneIdentifier:
+        Fn::Split:
+          - ','
+          - Ref: pASGSubnets
+      HealthCheckType: EC2
+      Cooldown:
+        Ref: pScaleUpWaitTime
+      TerminationPolicies:
+        - OldestLaunchConfiguration
+        - OldestInstance
+      NewInstancesProtectedFromScaleIn: "true"
+      MetricsCollection:
+
+        - Granularity: 1Minute
+          Metrics:
+            - GroupMinSize
+            - GroupMaxSize
+            - GroupDesiredCapacity
+            - GroupInServiceInstances
+            - GroupPendingInstances
+            - GroupStandbyInstances
+            - GroupTerminatingInstances
+            - GroupTotalInstances
+      Tags:
+        - Key: Name
+          Value: !Join [ "", [ !Ref 'AWS::StackName', "-application" ] ]
+          PropagateAtLaunch: true
+        - Key: "organization:connect-privileged-access"
+          Value: "YOUR_APP_SERVICE_USER"
+          PropagateAtLaunch: true
+        - Key: "organization:clasificacion-confidencialidad"
+          Value: "restringida"
+          PropagateAtLaunch: true
+        - Key: "organization:clasificacion-integridad"
+          Value: "impacto critico"
+          PropagateAtLaunch: true
+        - Key: "organization:clasificacion-disponibilidad"
+          Value: "impacto critico"
+          PropagateAtLaunch: true
+        - Key: "organization:dominio-informacion"
+          Value: "no"
+          PropagateAtLaunch: true
+        - Key: "organization:datos-personales"
+          Value: "no"
+          PropagateAtLaunch: true
+        - Key: "organization:cumplimiento"
+          Value: "bia"
+          PropagateAtLaunch: true
+
+  rInstanceASGParameterStore:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: InstanceASG
+      Type: String
+      Name: !Ref 'AWS::StackName'
+      Value:
+        Ref: rAutoScaling
+
+  rLambdaASGListIPs:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: YOUR_PROJECT_CODE-arch-deploy-pdn-bucket
+        S3Key: lambdas/python3.zip
+      Handler: mpki_get_csr/lambda_function_cache.lambda_handler
+      Role: !GetAtt rLambdaExecutionRoleASG.Arn
+      Runtime: !Ref pPythonVersion
+      FunctionName: !Sub "${pApplicationCode}-${pProjectName}-${pEnvironment}-list-ips"
+      MemorySize: 128
+      Timeout: 900
+      Description: Lambda para listar IPs de un target group
+      Environment:
+        Variables:
+          ARNTargetGroup: !Join [ "", [ "{{resolve:ssm:", !Ref pPSHTTPSTG, "}}" ] ]
+          ENVIRONMENT: !Ref pEnvironment
+          DelayTimeEC2: !Ref pDelayTimeEC2
+          ExecuteRestart: !Ref pExecuteRestart
+      Tags:
+        - Key: "organization:clasificacion-confidencialidad"
+          Value: "interna"
+        - Key: "organization:clasificacion-integridad"
+          Value: "impacto moderado"
+        - Key: "organization:clasificacion-disponibilidad"
+          Value: "impacto tolerable"
+        - Key: "Validación de reinicio"
+          Value: !Ref pExecuteRestart
+
+  rLambdaExecutionRoleASG:
+    Type: AWS::IAM::Role
+    Properties:
+      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/YOUR_GOVERNANCE_BOUNDARY_POLICY
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service: "lambda.amazonaws.com"
+            Action: "sts:AssumeRole"
+      Policies:
+        - PolicyName: "LambdaExecutionPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "elasticloadbalancing:DescribeTargetGroups"
+                  - "elasticloadbalancing:DescribeTargetHealth"
+                Resource: "*"
+              - Effect: "Allow"
+                Action:
+                  - "ec2:DescribeInstances"
+                Resource: "*"
+              - Effect: "Allow"
+                Action:
+                  - "ssm:SendCommand"
+                Resource: "*"
+
+Outputs:
+  rInstanceASG:
+    Description: InstanceASG.
+    Value:
+      Ref: rAutoScaling
+  rEC2LaunchConfig:
+    Description: launch configuration name
+    Value:
+      Ref: rEC2LaunchConfig
+  InternalCertificateEC2SecretArn01:
+    Value: !GetAtt InternalCertificateEC201.SecretArn
+  InternalCertificateEC2Cer01:
+    Value: !GetAtt InternalCertificateEC201.Cer
+  ExecuteRestart:
+    Value: !Ref pExecuteRestart

@@ -1,0 +1,70 @@
+[
+    {
+        "ParameterKey": "pNameALB",
+        "ParameterValue": "#{alb-name}#"
+    },
+    {
+        "ParameterKey": "pEnvironment",
+        "ParameterValue": "#{env}#"
+    },
+    {
+        "ParameterKey": "pSchemaALB",
+        "ParameterValue": "#{alb-schema}#"
+    },
+    {
+        "ParameterKey": "pSslPolicy",
+        "ParameterValue": "#{alb-ssl-policy}#"
+    },    
+    {
+        "ParameterKey": "pS3LogsALB",
+        "ParameterValue": "#{s3-bucket-logs-alb}#"
+    },
+    {
+        "ParameterKey": "pPSSGWAF",
+        "ParameterValue": "#{sg-waf}#"
+    },
+    {
+        "ParameterKey": "pPublicSubnets",
+        "ParameterValue": "#{subnets-public-string}#"
+    }, 
+    {
+        "ParameterKey": "pArnAlb",
+        "ParameterValue": "#{alb-arn-certificado}#"
+    },
+    {
+        "ParameterKey": "SampleLoadBalancer",
+        "ParameterValue": "#{shield-alb-arn}#"
+    },
+    {
+        "ParameterKey": "DomainLoadBalancer",
+        "ParameterValue": "#{shield-alb-dns}#"
+    },
+    {
+        "ParameterKey": "ProjectName",
+        "ParameterValue": "#{project-name}#"
+    },
+    {
+        "ParameterKey": "AppCode",
+        "ParameterValue": "#{application-code}#"
+    },
+    {
+        "ParameterKey": "EmailHealthcheck",
+        "ParameterValue": "#{shield-alarm-email}#"
+    },
+    {
+        "ParameterKey": "pArnKMS",
+        "ParameterValue": "#{arn-kms-project}#"
+    },
+    {
+      "ParameterKey": "pHealthCheckInterval",
+      "ParameterValue": "#{asg-target-group-health-interval}#"
+    },
+    {
+      "ParameterKey": "pHealthCheckCount",
+      "ParameterValue": "#{asg-target-group-health-count}#"
+    },
+    {
+      "ParameterKey": "pUnhealthCheckCount",
+      "ParameterValue": "#{asg-target-group-unhealth-count}#"
+    }
+]

@@ -1,0 +1,45 @@
+{
+    "version": "1.0.0",
+    "title": "Validate database availability.",
+    "description": "Database consuming services must be highly available when a database instance is restarted and forced failover.",
+    "tags": [
+        "Application-Code:#{app_code_SI}#",
+        "Project-Name:#{project_name_SI}#",
+        "AWS-Service:Aurora"
+    ],
+    "configuration": {},
+    "steady-state-hypothesis": {
+        "title": "Services availables and healthy",
+        "probes": [
+            {
+                "name": "cluster-status-aurora",
+                "type": "probe",
+                "tolerance": "available",
+                "provider": {
+                    "type": "python",
+                    "module": "chaosaws.rds.probes",
+                    "func": "cluster_status",
+                    "arguments": {
+                        "cluster_id": "#{db_cluster_id_SI}#"
+                    }
+                }
+            }
+        ]
+    },
+    "method": [
+        {
+            "name": "failover-db-cluster-aurora",
+            "type": "action",
+            "provider": {
+                "type": "python",
+                "module": "chaosaws.rds.actions",
+                "func": "failover_db_cluster",
+                "arguments": {
+                    "db_cluster_identifier": "#{db_cluster_id_SI}#",
+                    "target_db_instance_identifier": "#{db_instance_id_to_promove_SI}#"
+                }
+            }
+        }
+    ],
+    "rollbacks": []
+}

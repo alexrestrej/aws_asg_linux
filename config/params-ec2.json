@@ -1,0 +1,50 @@
+[
+    {
+        "ParameterKey": "pInstanceType",
+        "ParameterValue": "#{ec2-instance-type}#"
+    },
+    {
+        "ParameterKey": "pInstanceAMI",
+        "ParameterValue": "#{ec2-image-id-ami}#"
+    },
+    {
+        "ParameterKey": "pInstanceSubnet",
+        "ParameterValue": "#{subnet-app-1}#"
+    },
+    {
+        "ParameterKey": "pInstanceProfile",
+        "ParameterValue": "#{ec2-instance-profile}#"
+    },
+    {
+        "ParameterKey": "pPSKMS",
+        "ParameterValue": "#{ps-kms}#"
+    },
+    {
+        "ParameterKey": "pDisableApiTermination",
+        "ParameterValue": "#{ec2-api-termination}#"
+    },
+    {
+        "ParameterKey": "pVolumeSDA1",
+        "ParameterValue": "#{ec2-volume-size-so}#"
+    },
+    {
+        "ParameterKey": "pVolumeSDA2",
+        "ParameterValue": "#{ec2-volume-size-sda2}#"
+    },
+    {
+        "ParameterKey": "pPSSGEC2",
+        "ParameterValue": "#{sg-app}#"
+    },
+    {
+        "ParameterKey": "pPSSGCA",
+        "ParameterValue": "#{sg-privileged access service}#"
+    },
+    {
+        "ParameterKey": "pHostNameApp",
+        "ParameterValue": "#{app-hostname}#"
+    },
+    {
+        "ParameterKey": "pAz4Deployment",
+        "ParameterValue": "#{ec2-volume-az}#"
+    }
+]

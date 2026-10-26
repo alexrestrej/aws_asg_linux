@@ -1,0 +1,4118 @@
+# Stack removido. Se uso para la migracion DMS y ya no se requiere
+---
+AWSTemplateFormatVersion: 2010-09-09
+Description: 'This template deploys a DMS secutiry Group, ReplicationInstance, and its Endpoint'
+Parameters:
+
+  pImportBase:
+    Description: Cadena de proyecto para Parameter storage
+    Type: String    
+
+  pDmsSGCidrIp:
+    Description: CidrIp Security Group DMS
+    Type: String   
+
+  pPrivateSubnet1:
+    Description: VPC private subnet1
+    Type: String  
+  pPrivateSubnet2:
+    Description: VPC private subnet2
+    Type: String      
+  #pAvailabilityZone:
+  #  Description: Availability Zone
+  #  Type: String  
+  pDmsInstanceClass:
+    Description: DMS instance Class
+    Type: String
+  pDmsReplInstanceStorage:
+    Description: DMS Instance storage
+    Type: String  
+  pDmsSourceExtraConnAttributes:
+    Description: Attributes Conn DMS
+    Type: String  
+  # Source Endpoint 
+  pDmsSourceEngine:
+    Description: DMS Instance Name
+    Type: String  
+  pDmsSourceDBName:
+    Description: DMS Instance Name
+    Type: String
+  pDmsSourceUsername:
+    Description: DMS Instance Name
+    Type: String  
+  pDmsSourcePassword:
+    Description: DMS Instance Name
+    Type: String 
+  pDmsSourceDBServer:
+    Description: DMS Instance Name
+    Type: String 
+  pDmsSourceDBPort:
+    Description: DMS Instance Name
+    Type: String 
+
+# Target Endpoint
+  pDmsTargetEngine:
+    Description: DMS Instance Name
+    Type: String
+  pDmsTargetDBName:
+    Description: DMS Instance Name
+    Type: String      
+  pDmsTargetUsername:
+    Description: DMS Instance Name
+    Type: String
+  pDmsTargetPassword:
+    Description: DMS Instance Name
+    Type: String
+  pDmsTargetDBServer:
+    Description: DMS Instance Name
+    Type: String 
+  pDmsTargetDBPort:
+    Description: DMS Instance Name
+    Type: String 
+  pEnvironment:
+    Description: Ambiente donde se despliega.
+    Type: String
+
+Conditions:
+  cenvintermedio:
+    Fn::Or:
+      - Fn::Equals: [Ref: pEnvironment, qa]
+      - Fn::Equals: [Ref: pEnvironment, dev] 
+
+  cenvPdn:
+    Fn::Equals: [Ref: pEnvironment, pdn]
+
+Resources:
+### DMS
+  rSecurityGroupDMS:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: DMS security group of db mentioned in the name.
+      GroupName: 
+        Fn::Join: ["-", [Ref: 'AWS::StackName', "dms"]]
+      VpcId:
+        Fn::ImportValue: DefaultVPCId
+      SecurityGroupIngress:
+      - IpProtocol: tcp #tcp
+        FromPort: 443
+        ToPort: 1500
+        CidrIp: !Ref pDmsSGCidrIp #"YOUR_NETWORK_CIDR" # "YOUR_NETWORK_CIDR"
+      Tags:
+        - Key: Name
+          Value: 
+            Fn::Join: ["-", [Ref: 'AWS::StackName' , "sg"]]
+        - Key: "organization:clasificacion-confidencialidad"
+          Value: "restringida"
+        - Key: "organization:clasificacion-integridad"
+          Value: "impacto critico"
+        - Key: "organization:clasificacion-disponibilidad"
+          Value: "impacto critico"
+        - Key: "organization:dominio-informacion"
+          Value: "no"
+        - Key: "organization:datos-personales"
+          Value: "no"
+        - Key: "organization:cumplimiento"
+          Value: "no"
+### rol
+
+  # rDMSRole:
+  #   # Condition: cRolExiste 
+  #   Type: AWS::IAM::Role
+  #   Properties:
+  #     RoleName: 'dms-vpc-role-YOUR_PROJECT_NAME'
+  #     AssumeRolePolicyDocument:
+  #       Version: '2012-10-17'
+  #       Statement:
+  #       - Effect: Allow
+  #         Principal:
+  #           Service:
+  #           - dms.amazonaws.com 
+  #         Action:
+  #         - sts:AssumeRole
+  #     ManagedPolicyArns:
+  #       - arn:aws:iam::aws:policy/service-role/AmazonDMSVPCManagementRole
+  #       - arn:aws:iam::aws:policy/service-role/AmazonDMSCloudWatchLogsRole
+  # rIAMRoleForDMS:
+  #   Type: 'AWS::IAM::Role'
+  #   Properties:
+  #     PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/YOUR_GOVERNANCE_BOUNDARY_POLICY
+  #     RoleName: 
+  #       Fn::Join: ["-", [Ref: 'AWS::StackName' , "role-DMS"]]
+  #     AssumeRolePolicyDocument:
+  #       Statement: 
+  #         - Effect: Allow
+  #           Action: 
+  #             - "logs:DescribeLogGroups"
+  #           Resource: 
+  #             - "*"
+  #           Sid: AllowDescribeOnAllLogGroups
+  #         - Action: 
+  #             - "logs:DescribeLogStreams"
+  #           Effect: Allow
+  #           Resource: 
+  #             - "arn:aws:logs:*:*:log-group:dms-tasks-*"
+  #           Sid: AllowDescribeOfAllLogStreamsOnDmsTasksLogGroup
+  #         - Action: 
+  #             - "logs:CreateLogGroup"
+  #           Effect: Allow
+  #           Resource: 
+  #             - "arn:aws:logs:*:*:log-group:dms-tasks-*"
+  #           Sid: AllowCreationOfDmsTasksLogGroups
+  #         - Action: 
+  #             - "logs:CreateLogStream"
+  #           Effect: Allow
+  #           Resource: 
+  #             - "arn:aws:logs:*:*:log-group:dms-tasks-*:log-stream:dms-task-*"
+  #           Sid: AllowCreationOfDmsTaskLogStream
+  #         - Action: 
+  #             - "logs:PutLogEvents"
+  #           Effect: Allow
+  #           Resource: 
+  #             - "arn:aws:logs:*:*:log-group:dms-tasks-*:log-stream:dms-task-*"
+  #           Sid: AllowUploadOfLogEventsToDmsTaskLogStream
+  #     Path: /
+  #     Policies:
+  #       - PolicyName: root
+  #         PolicyDocument:
+  #           Version: "2012-10-17"
+  #           Statement:
+  #             - Effect: Allow
+  #               Action: '*'
+  #               Resource: '*'
+###
+
+  rDMSReplicationSubnetGroup:
+    Type: AWS::DMS::ReplicationSubnetGroup
+    Properties:
+      ReplicationSubnetGroupDescription: Subnets available for the DMS Replication Instance
+      SubnetIds: 
+        - Ref: pPrivateSubnet1
+        - Ref: pPrivateSubnet2
+      Tags:
+        - Key: Name
+          Value: 
+            Fn::Join: ["-", [Ref: 'AWS::StackName' , "dms", "subnetgroup"]]
+        - Key: "organization:clasificacion-confidencialidad"
+          Value: "restringida"
+        - Key: "organization:clasificacion-integridad"
+          Value: "impacto critico"
+        - Key: "organization:clasificacion-disponibilidad"
+          Value: "impacto critico"
+        - Key: "organization:dominio-informacion"
+          Value: "no"
+        - Key: "organization:datos-personales"
+          Value: "no"
+        - Key: "organization:cumplimiento"
+          Value: "no"
+
+
+  rDMSReplicationInstance:
+    Type: AWS::DMS::ReplicationInstance
+    Properties:
+#      AvailabilityZone: !Ref pAvailabilityZone
+      ReplicationSubnetGroupIdentifier: !Ref rDMSReplicationSubnetGroup
+      PubliclyAccessible: false
+      EngineVersion: 3.4.6
+      ReplicationInstanceIdentifier: 
+        Fn::Join: ["-", [Ref: 'AWS::StackName' , "replication"]]
+      ReplicationInstanceClass: 
+        Ref: pDmsInstanceClass
+      KmsKeyId: 
+#        Fn::GetAtt: [ rKmsKey, Arn ]
+        Fn::Join: ["", ["{{resolve:ssm:", Ref: pImportBase, "-kms:1}}"]]
+      AllocatedStorage: 
+        Ref: pDmsReplInstanceStorage
+      VpcSecurityGroupIds: 
+        - Ref: rSecurityGroupDMS
+      Tags:
+        - Key: Name
+          Value: 
+            Fn::Join: ["-", [Ref: 'AWS::StackName' , "DMSReplicationInstance"]]
+        - Key: "organization:clasificacion-confidencialidad"
+          Value: "restringida"
+        - Key: "organization:clasificacion-integridad"
+          Value: "impacto critico"
+        - Key: "organization:clasificacion-disponibilidad"
+          Value: "impacto critico"
+        - Key: "organization:dominio-informacion"
+          Value: "no"
+        - Key: "organization:datos-personales"
+          Value: "no"
+        - Key: "organization:cumplimiento"
+          Value: "no"
+      
+  rSourceDatabase:
+    Type: AWS::DMS::Endpoint
+    DependsOn:
+      - rDMSReplicationInstance
+    Properties:
+      EndpointIdentifier: 
+        Fn::Join: ["-", [Ref: 'AWS::StackName', 'endpoint-source']]
+      EngineName: 
+        Ref: pDmsSourceEngine
+      DatabaseName: 
+        Ref: pDmsSourceDBName
+      EndpointType: "source"
+      Username: 
+        Ref: pDmsSourceUsername
+      Password: 
+        Ref: pDmsSourcePassword
+      ServerName: 
+        Ref: pDmsSourceDBServer
+      Port: 
+        Ref: pDmsSourceDBPort
+      ExtraConnectionAttributes: 
+        Ref: pDmsSourceExtraConnAttributes
+      Tags:
+        - Key: Name
+          Value: 
+            Fn::Join: ["-", [Ref: 'AWS::StackName', "SourceDatabase"]]
+        - Key: "organization:clasificacion-confidencialidad"
+          Value: "restringida"
+        - Key: "organization:clasificacion-integridad"
+          Value: "impacto critico"
+        - Key: "organization:clasificacion-disponibilidad"
+          Value: "impacto critico"
+        - Key: "organization:dominio-informacion"
+          Value: "no"
+        - Key: "organization:datos-personales"
+          Value: "no"
+        - Key: "organization:cumplimiento"
+          Value: "no"
+
+
+##### TARGET
+  rTargetDatabase:
+    Type: AWS::DMS::Endpoint
+    DependsOn:
+      - rDMSReplicationInstance
+    Properties:
+      EndpointIdentifier: 
+        Fn::Join: ["-", [Ref: 'AWS::StackName', 'endpoint-target']]
+      EngineName: 
+        Ref: pDmsTargetEngine
+      DatabaseName: 
+        Ref: pDmsTargetDBName
+      EndpointType: "target"
+      Username: 
+        Ref: pDmsTargetUsername
+      Password: 
+        Ref: pDmsTargetPassword
+      ServerName: 
+        Ref: pDmsTargetDBServer
+      Port: 
+        Ref: pDmsTargetDBPort
+
+      Tags:
+        - Key: Name
+          Value: 
+            Fn::Join: ["-", [Ref: 'AWS::StackName' , "TargetDatabase"]]
+        - Key: "organization:clasificacion-confidencialidad"
+          Value: "restringida"
+        - Key: "organization:clasificacion-integridad"
+          Value: "impacto critico"
+        - Key: "organization:clasificacion-disponibilidad"
+          Value: "impacto critico"
+        - Key: "organization:dominio-informacion"
+          Value: "no"
+        - Key: "organization:datos-personales"
+          Value: "no"
+        - Key: "organization:cumplimiento"
+          Value: "no"
+    
+  rReplicationYOUR_PROJECT_NAMEOWNER:
+    Condition: cenvintermedio
+    Type: AWS::DMS::ReplicationTask
+    DependsOn: rDMSReplicationInstance
+    Properties:      
+      MigrationType: full-load-and-cdc
+      ReplicationInstanceArn: !Ref rDMSReplicationInstance
+      ReplicationTaskIdentifier: 
+        Fn::Join: [ "-", [ Ref: pImportBase, "full-load-cdc", "YOUR_PROJECT_NAMEOWNER"]]
+      SourceEndpointArn: !Ref rSourceDatabase
+      TargetEndpointArn: !Ref rTargetDatabase
+      TableMappings: 
+        Fn::Sub:
+          -
+            '{
+              "rules": [
+                {
+                  "rule-type": "transformation",
+                  "rule-id": "1",
+                  "rule-name": "1",
+                  "rule-target": "schema",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "%"
+                  },
+                  "rule-action": "rename",
+                  "value": "${TARGET_SCHEMA}",
+                  "old-value": null
+                },
+                      {
+                  "rule-type": "selection",
+                  "rule-id": "2",
+                  "rule-name": "2",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "DETECT_COMMON_CONFIGURATIONS%"
+                  },
+                  "rule-action": "exclude"
+
+                },
+                {
+                  "rule-type": "selection",
+                  "rule-id": "3",
+                  "rule-name": "3",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "%"
+                  },
+                  "rule-action": "include",
+                  "filters": []
+                }
+              ]
+            }'
+          - SOURCE_SCHEMA: "YOUR_PROJECT_NAME_OWNER"
+            TARGET_SCHEMA: "YOUR_PROJECT_NAME_OWNER"
+      ReplicationTaskSettings: 
+        Fn::Sub:
+          - '{
+              "TargetMetadata": {
+                  "TargetSchema": "${TARGET_SCHEMA}",
+                  "SupportLobs": true,
+                  "FullLobMode": true,
+                  "LobChunkSize": 64,
+                  "LimitedSizeLobMode": false,
+                  "LobMaxSize": 0,
+                  "InlineLobMaxSize": 0,
+                  "LoadMaxFileSize": 0,
+                  "ParallelLoadThreads": 0,
+                  "ParallelLoadBufferSize": 0,
+                  "BatchApplyEnabled": false,
+                  "TaskRecoveryTableEnabled": false,
+                  "ParallelLoadQueuesPerThread": 0,
+                  "ParallelApplyThreads": 0,
+                  "ParallelApplyBufferSize": 0,
+                  "ParallelApplyQueuesPerThread": 0
+              },
+              "FullLoadSettings": {
+                  "TargetTablePrepMode": "TRUNCATE_BEFORE_LOAD",
+                  "CreatePkAfterFullLoad": false,
+                  "StopTaskCachedChangesApplied": false,
+                  "StopTaskCachedChangesNotApplied": false,
+                  "MaxFullLoadSubTasks": 8,
+                  "TransactionConsistencyTimeout": 600,
+                  "CommitRate": 10000
+              },
+              "Logging": {
+                  "EnableLogging": true,
+                  "LogComponents": [
+                      {
+                          "Id": "TRANSFORMATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_UNLOAD",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "IO",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_LOAD",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "PERFORMANCE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_CAPTURE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SORTER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "REST_SERVER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "VALIDATOR_EXT",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_APPLY",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TASK_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TABLES_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "METADATA_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_FACTORY",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMON",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "ADDONS",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "DATA_STRUCTURE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMUNICATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_TRANSFER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      }
+                  ]
+              },
+              "ControlTablesSettings": {
+                  "historyTimeslotInMinutes": 5,
+                  "ControlSchema": "",
+                  "HistoryTimeslotInMinutes": 5,
+                  "HistoryTableEnabled": false,
+                  "SuspendedTablesTableEnabled": false,
+                  "StatusTableEnabled": false
+              },
+              "StreamBufferSettings": {
+                  "StreamBufferCount": 3,
+                  "StreamBufferSizeInMB": 8,
+                  "CtrlStreamBufferSizeInMB": 5
+              },
+              "ChangeProcessingDdlHandlingPolicy": {
+                  "HandleSourceTableDropped": true,
+                  "HandleSourceTableTruncated": true,
+                  "HandleSourceTableAltered": true
+              },
+              "ErrorBehavior": {
+                  "DataErrorPolicy": "LOG_ERROR",
+                  "DataTruncationErrorPolicy": "LOG_ERROR",
+                  "DataErrorEscalationPolicy": "SUSPEND_TABLE",
+                  "DataErrorEscalationCount": 0,
+                  "TableErrorPolicy": "SUSPEND_TABLE",
+                  "TableErrorEscalationPolicy": "STOP_TASK",
+                  "TableErrorEscalationCount": 0,
+                  "RecoverableErrorCount": -1,
+                  "RecoverableErrorInterval": 5,
+                  "RecoverableErrorThrottling": true,
+                  "RecoverableErrorThrottlingMax": 1800,
+                  "ApplyErrorDeletePolicy": "IGNORE_RECORD",
+                  "ApplyErrorInsertPolicy": "LOG_ERROR",
+                  "ApplyErrorUpdatePolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationPolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationCount": 0,
+                  "ApplyErrorFailOnTruncationDdl": false,
+                  "FullLoadIgnoreConflicts": true,
+                  "FailOnTransactionConsistencyBreached": false,
+                  "FailOnNoTablesCaptured": false
+              },
+              "ChangeProcessingTuning": {
+                  "BatchApplyPreserveTransaction": true,
+                  "BatchApplyTimeoutMin": 1,
+                  "BatchApplyTimeoutMax": 30,
+                  "BatchApplyMemoryLimit": 500,
+                  "BatchSplitSize": 0,
+                  "MinTransactionSize": 1000,
+                  "CommitTimeout": 1,
+                  "MemoryLimitTotal": 1024,
+                  "MemoryKeepTime": 60,
+                  "StatementCacheSize": 50
+              }
+          }'
+          - TARGET_SCHEMA: "CNXDMSAW"
+      Tags:
+        - Key: Name
+          Value: 
+            Fn::Join: ["-", [Ref: 'AWS::StackName' , "ReplicationYOUR_PROJECT_NAMEOWNER"]]
+        - Key: "organization:clasificacion-confidencialidad"
+          Value: "restringida"
+        - Key: "organization:clasificacion-integridad"
+          Value: "impacto critico"
+        - Key: "organization:clasificacion-disponibilidad"
+          Value: "impacto critico"
+        - Key: "organization:dominio-informacion"
+          Value: "no"
+        - Key: "organization:datos-personales"
+          Value: "no"
+        - Key: "organization:cumplimiento"
+          Value: "no"
+
+  rReplicationTaskSCHDETID0:
+    Condition: cenvintermedio
+    Type: AWS::DMS::ReplicationTask
+    DependsOn: rDMSReplicationInstance
+    Properties:
+      MigrationType: full-load-and-cdc
+      ReplicationInstanceArn: !Ref rDMSReplicationInstance
+      ReplicationTaskIdentifier: 
+        Fn::Join: [ "-", [ Ref: pImportBase, "full-load-cdc", "SCHDETID0"]]
+      SourceEndpointArn: !Ref rSourceDatabase
+      TargetEndpointArn: !Ref rTargetDatabase
+      TableMappings: 
+        Fn::Sub:
+          -  
+            '{
+              "rules": [
+                {
+                  "rule-type": "transformation",
+                  "rule-id": "1",
+                  "rule-name": "1",
+                  "rule-target": "schema",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "%"
+                  },
+                  "rule-action": "rename",
+                  "value": "${TARGET_SCHEMA}",
+                  "old-value": null
+                },
+                      {
+                  "rule-type": "selection",
+                  "rule-id": "2",
+                  "rule-name": "2",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "DETECT_COMMON_CONFIGURATIONS%"
+                  },
+                  "rule-action": "exclude"
+
+                },
+                {
+                  "rule-type": "selection",
+                  "rule-id": "3",
+                  "rule-name": "3",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "%"
+                  },
+                  "rule-action": "include",
+                  "filters": []
+                }
+              ]
+            }'
+          - SOURCE_SCHEMA: "SCHDETID"
+            TARGET_SCHEMA: "SCHDETID"
+      ReplicationTaskSettings: 
+        Fn::Sub:
+          - '{
+              "TargetMetadata": {
+                  "TargetSchema": "${TARGET_SCHEMA}",
+                  "SupportLobs": true,
+                  "FullLobMode": true,
+                  "LobChunkSize": 64,
+                  "LimitedSizeLobMode": false,
+                  "LobMaxSize": 0,
+                  "InlineLobMaxSize": 0,
+                  "LoadMaxFileSize": 0,
+                  "ParallelLoadThreads": 0,
+                  "ParallelLoadBufferSize": 0,
+                  "BatchApplyEnabled": false,
+                  "TaskRecoveryTableEnabled": false,
+                  "ParallelLoadQueuesPerThread": 0,
+                  "ParallelApplyThreads": 0,
+                  "ParallelApplyBufferSize": 0,
+                  "ParallelApplyQueuesPerThread": 0
+              },
+              "FullLoadSettings": {
+                  "TargetTablePrepMode": "TRUNCATE_BEFORE_LOAD",
+                  "CreatePkAfterFullLoad": false,
+                  "StopTaskCachedChangesApplied": false,
+                  "StopTaskCachedChangesNotApplied": false,
+                  "MaxFullLoadSubTasks": 8,
+                  "TransactionConsistencyTimeout": 600,
+                  "CommitRate": 10000
+              },
+              "Logging": {
+                  "EnableLogging": true,
+                  "LogComponents": [
+                      {
+                          "Id": "TRANSFORMATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_UNLOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "IO",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_LOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "PERFORMANCE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_CAPTURE",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "SORTER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "REST_SERVER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "VALIDATOR_EXT",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_APPLY",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TASK_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TABLES_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "METADATA_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_FACTORY",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMON",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "ADDONS",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "DATA_STRUCTURE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMUNICATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_TRANSFER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      }
+                  ]
+              },
+              "ControlTablesSettings": {
+                  "historyTimeslotInMinutes": 5,
+                  "ControlSchema": "",
+                  "HistoryTimeslotInMinutes": 5,
+                  "HistoryTableEnabled": false,
+                  "SuspendedTablesTableEnabled": false,
+                  "StatusTableEnabled": false
+              },
+              "StreamBufferSettings": {
+                  "StreamBufferCount": 3,
+                  "StreamBufferSizeInMB": 8,
+                  "CtrlStreamBufferSizeInMB": 5
+              },
+              "ChangeProcessingDdlHandlingPolicy": {
+                  "HandleSourceTableDropped": true,
+                  "HandleSourceTableTruncated": true,
+                  "HandleSourceTableAltered": true
+              },
+              "ErrorBehavior": {
+                  "DataErrorPolicy": "LOG_ERROR",
+                  "DataTruncationErrorPolicy": "LOG_ERROR",
+                  "DataErrorEscalationPolicy": "SUSPEND_TABLE",
+                  "DataErrorEscalationCount": 0,
+                  "TableErrorPolicy": "SUSPEND_TABLE",
+                  "TableErrorEscalationPolicy": "STOP_TASK",
+                  "TableErrorEscalationCount": 0,
+                  "RecoverableErrorCount": -1,
+                  "RecoverableErrorInterval": 5,
+                  "RecoverableErrorThrottling": true,
+                  "RecoverableErrorThrottlingMax": 1800,
+                  "ApplyErrorDeletePolicy": "IGNORE_RECORD",
+                  "ApplyErrorInsertPolicy": "LOG_ERROR",
+                  "ApplyErrorUpdatePolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationPolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationCount": 0,
+                  "ApplyErrorFailOnTruncationDdl": false,
+                  "FullLoadIgnoreConflicts": true,
+                  "FailOnTransactionConsistencyBreached": false,
+                  "FailOnNoTablesCaptured": false
+              },
+              "ChangeProcessingTuning": {
+                  "BatchApplyPreserveTransaction": true,
+                  "BatchApplyTimeoutMin": 1,
+                  "BatchApplyTimeoutMax": 30,
+                  "BatchApplyMemoryLimit": 500,
+                  "BatchSplitSize": 0,
+                  "MinTransactionSize": 1000,
+                  "CommitTimeout": 1,
+                  "MemoryLimitTotal": 1024,
+                  "MemoryKeepTime": 60,
+                  "StatementCacheSize": 50
+              }
+          }'
+          - TARGET_SCHEMA: "CNXDMSAW"
+      Tags:
+        - Key: Name
+          Value: 
+            Fn::Join: ["-", [Ref: 'AWS::StackName' , "ReplicationSCHDETID"]]
+        - Key: "organization:clasificacion-confidencialidad"
+          Value: "restringida"
+        - Key: "organization:clasificacion-integridad"
+          Value: "impacto critico"
+        - Key: "organization:clasificacion-disponibilidad"
+          Value: "impacto critico"
+        - Key: "organization:dominio-informacion"
+          Value: "no"
+        - Key: "organization:datos-personales"
+          Value: "no"
+        - Key: "organization:cumplimiento"
+          Value: "no"
+
+  rReplicationSCHDETI84:
+    Condition: cenvintermedio
+    Type: AWS::DMS::ReplicationTask
+    DependsOn: rDMSReplicationInstance
+    Properties:
+      MigrationType: full-load-and-cdc
+      ReplicationInstanceArn: !Ref rDMSReplicationInstance
+      ReplicationTaskIdentifier: 
+        Fn::Join: [ "-", [ Ref: pImportBase, "full-load-and-cdc", "SCHDETI84"]]
+      SourceEndpointArn: !Ref rSourceDatabase
+      TargetEndpointArn: !Ref rTargetDatabase
+      TableMappings: 
+        Fn::Sub:
+          -  
+            '{
+              "rules": [
+                {
+                  "rule-type": "transformation",
+                  "rule-id": "1",
+                  "rule-name": "1",
+                  "rule-target": "schema",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "%"
+                  },
+                  "rule-action": "rename",
+                  "value": "${TARGET_SCHEMA}",
+                  "old-value": null
+                },
+                      {
+                  "rule-type": "selection",
+                  "rule-id": "2",
+                  "rule-name": "2",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "DETECT_COMMON_CONFIGURATIONS%"
+                  },
+                  "rule-action": "exclude"
+
+                },
+                {
+                  "rule-type": "selection",
+                  "rule-id": "3",
+                  "rule-name": "3",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "OTBMAIL_HISTORY%"
+                  },
+                  "rule-action": "exclude"
+
+                },
+                {
+                  "rule-type": "selection",
+                  "rule-id": "4",
+                  "rule-name": "4",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "MOBILE_AUTH_HISTORY%"
+                  },
+                  "rule-action": "exclude"
+
+                },
+                {
+                  "rule-type": "selection",
+                  "rule-id": "5",
+                  "rule-name": "5",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "AUDITS%"
+                  },
+                  "rule-action": "exclude"
+
+                },
+                {
+                  "rule-type": "selection",
+                  "rule-id": "6",
+                  "rule-name": "6",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "REPORT_PAGE%"
+                  },
+                  "rule-action": "exclude"
+
+                },
+                {
+                  "rule-type": "selection",
+                  "rule-id": "7",
+                  "rule-name": "7",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "%"
+                  },
+                  "rule-action": "include",
+                  "filters": []
+                }
+              ]
+            }'
+          - SOURCE_SCHEMA: "SCHDETID84"
+            TARGET_SCHEMA: "SCHDETID84"
+      ReplicationTaskSettings: 
+        Fn::Sub:
+          - '{
+              "TargetMetadata": {
+                  "TargetSchema": "${TARGET_SCHEMA}",
+                  "SupportLobs": true,
+                  "FullLobMode": true,
+                  "LobChunkSize": 64,
+                  "LimitedSizeLobMode": false,
+                  "LobMaxSize": 0,
+                  "InlineLobMaxSize": 0,
+                  "LoadMaxFileSize": 0,
+                  "ParallelLoadThreads": 0,
+                  "ParallelLoadBufferSize": 0,
+                  "BatchApplyEnabled": false,
+                  "TaskRecoveryTableEnabled": false,
+                  "ParallelLoadQueuesPerThread": 0,
+                  "ParallelApplyThreads": 0,
+                  "ParallelApplyBufferSize": 0,
+                  "ParallelApplyQueuesPerThread": 0
+              },
+              "FullLoadSettings": {
+                  "TargetTablePrepMode": "TRUNCATE_BEFORE_LOAD",
+                  "CreatePkAfterFullLoad": false,
+                  "StopTaskCachedChangesApplied": false,
+                  "StopTaskCachedChangesNotApplied": false,
+                  "MaxFullLoadSubTasks": 3,
+                  "TransactionConsistencyTimeout": 600,
+                  "CommitRate": 100
+              },
+              "Logging": {
+                  "EnableLogging": true,
+                  "LogComponents": [
+                      {
+                          "Id": "TRANSFORMATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_UNLOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "IO",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_LOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "PERFORMANCE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_CAPTURE",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "SORTER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "REST_SERVER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "VALIDATOR_EXT",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_APPLY",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TASK_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TABLES_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "METADATA_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_FACTORY",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMON",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "ADDONS",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "DATA_STRUCTURE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMUNICATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_TRANSFER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      }
+                  ]
+              },
+              "ControlTablesSettings": {
+                  "historyTimeslotInMinutes": 5,
+                  "ControlSchema": "",
+                  "HistoryTimeslotInMinutes": 5,
+                  "HistoryTableEnabled": false,
+                  "SuspendedTablesTableEnabled": false,
+                  "StatusTableEnabled": false
+              },
+              "StreamBufferSettings": {
+                  "StreamBufferCount": 3,
+                  "StreamBufferSizeInMB": 8,
+                  "CtrlStreamBufferSizeInMB": 5
+              },
+              "ChangeProcessingDdlHandlingPolicy": {
+                  "HandleSourceTableDropped": true,
+                  "HandleSourceTableTruncated": true,
+                  "HandleSourceTableAltered": true
+              },
+              "ErrorBehavior": {
+                  "DataErrorPolicy": "LOG_ERROR",
+                  "DataTruncationErrorPolicy": "LOG_ERROR",
+                  "DataErrorEscalationPolicy": "SUSPEND_TABLE",
+                  "DataErrorEscalationCount": 0,
+                  "TableErrorPolicy": "SUSPEND_TABLE",
+                  "TableErrorEscalationPolicy": "STOP_TASK",
+                  "TableErrorEscalationCount": 0,
+                  "RecoverableErrorCount": -1,
+                  "RecoverableErrorInterval": 5,
+                  "RecoverableErrorThrottling": true,
+                  "RecoverableErrorThrottlingMax": 1800,
+                  "ApplyErrorDeletePolicy": "IGNORE_RECORD",
+                  "ApplyErrorInsertPolicy": "LOG_ERROR",
+                  "ApplyErrorUpdatePolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationPolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationCount": 0,
+                  "ApplyErrorFailOnTruncationDdl": false,
+                  "FullLoadIgnoreConflicts": true,
+                  "FailOnTransactionConsistencyBreached": false,
+                  "FailOnNoTablesCaptured": false
+              },
+              "ChangeProcessingTuning": {
+                  "BatchApplyPreserveTransaction": true,
+                  "BatchApplyTimeoutMin": 1,
+                  "BatchApplyTimeoutMax": 30,
+                  "BatchApplyMemoryLimit": 500,
+                  "BatchSplitSize": 0,
+                  "MinTransactionSize": 1000,
+                  "CommitTimeout": 1,
+                  "MemoryLimitTotal": 1024,
+                  "MemoryKeepTime": 60,
+                  "StatementCacheSize": 50
+              }
+          }'
+          - TARGET_SCHEMA: "CNXDMSAW"
+      Tags:
+        - Key: Name
+          Value: 
+            Fn::Join: ["-", [Ref: 'AWS::StackName' , "ReplicationSCHDETID84"]]
+        - Key: "organization:clasificacion-confidencialidad"
+          Value: "restringida"
+        - Key: "organization:clasificacion-integridad"
+          Value: "impacto critico"
+        - Key: "organization:clasificacion-disponibilidad"
+          Value: "impacto critico"
+        - Key: "organization:dominio-informacion"
+          Value: "no"
+        - Key: "organization:datos-personales"
+          Value: "no"
+        - Key: "organization:cumplimiento"
+          Value: "no"
+
+##tabla DETECTCONFIGURATIONS schema SCHDETID
+  rReplicationTaskDETECCONFIGURATIONSSCHDETID:
+    Condition: cenvintermedio
+    Type: AWS::DMS::ReplicationTask
+    DependsOn: rDMSReplicationInstance
+    Properties:
+      MigrationType: full-load-and-cdc
+      ReplicationInstanceArn: !Ref rDMSReplicationInstance
+      ReplicationTaskIdentifier: 
+        Fn::Join: [ "-", [ Ref: pImportBase, "full-load-cdc", "tbl-DETECCONFIGURATIONS-SCHDETID"]]
+      SourceEndpointArn: !Ref rSourceDatabase
+      TargetEndpointArn: !Ref rTargetDatabase
+      TableMappings: 
+        Fn::Sub:
+          -  
+            '{
+              "rules": [
+                {
+                  "rule-type": "transformation",
+                  "rule-id": "1",
+                  "rule-name": "1",
+                  "rule-target": "schema",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "%"
+                  },
+                  "rule-action": "rename",
+                  "value": "${TARGET_SCHEMA}",
+                  "old-value": null
+                },
+                      {
+                  "rule-type": "selection",
+                  "rule-id": "2",
+                  "rule-name": "2",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "DETECT_COMMON_CONFIGURATIONS%"
+                  },
+                  "rule-action": "include",
+                  "filters": []
+                }
+              ]
+            }'
+          - SOURCE_SCHEMA: "SCHDETID"
+            TARGET_SCHEMA: "SCHDETID"
+      ReplicationTaskSettings: 
+        Fn::Sub:
+          - '{
+              "TargetMetadata": {
+                  "TargetSchema": "${TARGET_SCHEMA}",
+                  "SupportLobs": true,
+                  "FullLobMode": false,
+                  "LobChunkSize": 0,
+                  "LimitedSizeLobMode": true,
+                  "LobMaxSize": 64,
+                  "InlineLobMaxSize": 0,
+                  "LoadMaxFileSize": 0,
+                  "ParallelLoadThreads": 0,
+                  "ParallelLoadBufferSize": 0,
+                  "BatchApplyEnabled": false,
+                  "TaskRecoveryTableEnabled": false,
+                  "ParallelLoadQueuesPerThread": 0,
+                  "ParallelApplyThreads": 0,
+                  "ParallelApplyBufferSize": 0,
+                  "ParallelApplyQueuesPerThread": 0
+              },
+              "FullLoadSettings": {
+                  "TargetTablePrepMode": "TRUNCATE_BEFORE_LOAD",
+                  "CreatePkAfterFullLoad": false,
+                  "StopTaskCachedChangesApplied": false,
+                  "StopTaskCachedChangesNotApplied": false,
+                  "MaxFullLoadSubTasks": 8,
+                  "TransactionConsistencyTimeout": 600,
+                  "CommitRate": 10000
+              },
+              "Logging": {
+                  "EnableLogging": true,
+                  "LogComponents": [
+                      {
+                          "Id": "TRANSFORMATION",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "SOURCE_UNLOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "IO",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TARGET_LOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "PERFORMANCE",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "SOURCE_CAPTURE",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "SORTER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "REST_SERVER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "VALIDATOR_EXT",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TARGET_APPLY",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TASK_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TABLES_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "METADATA_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "FILE_FACTORY",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "COMMON",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "ADDONS",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "DATA_STRUCTURE",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "COMMUNICATION",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "FILE_TRANSFER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      }
+                  ]
+              },
+              "ControlTablesSettings": {
+                  "historyTimeslotInMinutes": 5,
+                  "ControlSchema": "",
+                  "HistoryTimeslotInMinutes": 5,
+                  "HistoryTableEnabled": false,
+                  "SuspendedTablesTableEnabled": false,
+                  "StatusTableEnabled": false
+              },
+              "StreamBufferSettings": {
+                  "StreamBufferCount": 3,
+                  "StreamBufferSizeInMB": 8,
+                  "CtrlStreamBufferSizeInMB": 5
+              },
+              "ChangeProcessingDdlHandlingPolicy": {
+                  "HandleSourceTableDropped": true,
+                  "HandleSourceTableTruncated": true,
+                  "HandleSourceTableAltered": true
+              },
+              "ErrorBehavior": {
+                  "DataErrorPolicy": "LOG_ERROR",
+                  "DataTruncationErrorPolicy": "LOG_ERROR",
+                  "DataErrorEscalationPolicy": "SUSPEND_TABLE",
+                  "DataErrorEscalationCount": 0,
+                  "TableErrorPolicy": "SUSPEND_TABLE",
+                  "TableErrorEscalationPolicy": "STOP_TASK",
+                  "TableErrorEscalationCount": 0,
+                  "RecoverableErrorCount": -1,
+                  "RecoverableErrorInterval": 5,
+                  "RecoverableErrorThrottling": true,
+                  "RecoverableErrorThrottlingMax": 1800,
+                  "ApplyErrorDeletePolicy": "IGNORE_RECORD",
+                  "ApplyErrorInsertPolicy": "LOG_ERROR",
+                  "ApplyErrorUpdatePolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationPolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationCount": 0,
+                  "ApplyErrorFailOnTruncationDdl": false,
+                  "FullLoadIgnoreConflicts": true,
+                  "FailOnTransactionConsistencyBreached": false,
+                  "FailOnNoTablesCaptured": false
+              },
+              "ChangeProcessingTuning": {
+                  "BatchApplyPreserveTransaction": true,
+                  "BatchApplyTimeoutMin": 1,
+                  "BatchApplyTimeoutMax": 30,
+                  "BatchApplyMemoryLimit": 500,
+                  "BatchSplitSize": 0,
+                  "MinTransactionSize": 1000,
+                  "CommitTimeout": 1,
+                  "MemoryLimitTotal": 1024,
+                  "MemoryKeepTime": 60,
+                  "StatementCacheSize": 50
+              }
+          }'
+          - TARGET_SCHEMA: "CNXDMSAW"
+      Tags:
+        - Key: Name
+          Value: 
+            Fn::Join: ["-", [Ref: 'AWS::StackName' , "DETECTCONFIGURATIONS"]]
+        - Key: "organization:clasificacion-confidencialidad"
+          Value: "restringida"
+        - Key: "organization:clasificacion-integridad"
+          Value: "impacto critico"
+        - Key: "organization:clasificacion-disponibilidad"
+          Value: "impacto critico"
+        - Key: "organization:dominio-informacion"
+          Value: "no"
+        - Key: "organization:datos-personales"
+          Value: "no"
+        - Key: "organization:cumplimiento"
+          Value: "no"
+
+
+##tabla DETECTCONFIGURATIONS schema SCHDETID84
+  rReplicationTaskDETECTCONFIGURATIONSSCHDETID84:
+    Condition: cenvintermedio
+    Type: AWS::DMS::ReplicationTask
+    DependsOn: rDMSReplicationInstance
+    Properties:
+      MigrationType: full-load-and-cdc
+      ReplicationInstanceArn: !Ref rDMSReplicationInstance
+      ReplicationTaskIdentifier: 
+        Fn::Join: [ "-", [ Ref: pImportBase, "full-load-cdc", "tbl-DETECTCONFIGURATIONS-SCHDETID84"]]
+      SourceEndpointArn: !Ref rSourceDatabase
+      TargetEndpointArn: !Ref rTargetDatabase
+      TableMappings: 
+        Fn::Sub:
+          -  
+            '{
+              "rules": [
+                {
+                  "rule-type": "transformation",
+                  "rule-id": "1",
+                  "rule-name": "1",
+                  "rule-target": "schema",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "%"
+                  },
+                  "rule-action": "rename",
+                  "value": "${TARGET_SCHEMA}",
+                  "old-value": null
+                },
+                      {
+                  "rule-type": "selection",
+                  "rule-id": "2",
+                  "rule-name": "2",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "DETECT_COMMON_CONFIGURATIONS%"
+                  },
+                  "rule-action": "include",
+                  "filters": []
+                }
+              ]
+            }'
+          - SOURCE_SCHEMA: "SCHDETID84"
+            TARGET_SCHEMA: "SCHDETID84"
+      ReplicationTaskSettings: 
+        Fn::Sub:
+          - '{
+              "TargetMetadata": {
+                  "TargetSchema": "${TARGET_SCHEMA}",
+                  "SupportLobs": true,
+                  "FullLobMode": false,
+                  "LobChunkSize": 0,
+                  "LimitedSizeLobMode": true,
+                  "LobMaxSize": 64,
+                  "InlineLobMaxSize": 0,
+                  "LoadMaxFileSize": 0,
+                  "ParallelLoadThreads": 0,
+                  "ParallelLoadBufferSize": 0,
+                  "BatchApplyEnabled": false,
+                  "TaskRecoveryTableEnabled": false,
+                  "ParallelLoadQueuesPerThread": 0,
+                  "ParallelApplyThreads": 0,
+                  "ParallelApplyBufferSize": 0,
+                  "ParallelApplyQueuesPerThread": 0
+              },
+              "FullLoadSettings": {
+                  "TargetTablePrepMode": "TRUNCATE_BEFORE_LOAD",
+                  "CreatePkAfterFullLoad": false,
+                  "StopTaskCachedChangesApplied": false,
+                  "StopTaskCachedChangesNotApplied": false,
+                  "MaxFullLoadSubTasks": 8,
+                  "TransactionConsistencyTimeout": 600,
+                  "CommitRate": 10000
+              },
+              "Logging": {
+                  "EnableLogging": true,
+                  "LogComponents": [
+                      {
+                          "Id": "TRANSFORMATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_UNLOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "IO",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_LOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "PERFORMANCE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_CAPTURE",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "SORTER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "REST_SERVER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "VALIDATOR_EXT",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_APPLY",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TASK_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TABLES_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "METADATA_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_FACTORY",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMON",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "ADDONS",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "DATA_STRUCTURE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMUNICATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_TRANSFER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      }
+                  ]
+              },
+              "ControlTablesSettings": {
+                  "historyTimeslotInMinutes": 5,
+                  "ControlSchema": "",
+                  "HistoryTimeslotInMinutes": 5,
+                  "HistoryTableEnabled": false,
+                  "SuspendedTablesTableEnabled": false,
+                  "StatusTableEnabled": false
+              },
+              "StreamBufferSettings": {
+                  "StreamBufferCount": 3,
+                  "StreamBufferSizeInMB": 8,
+                  "CtrlStreamBufferSizeInMB": 5
+              },
+              "ChangeProcessingDdlHandlingPolicy": {
+                  "HandleSourceTableDropped": true,
+                  "HandleSourceTableTruncated": true,
+                  "HandleSourceTableAltered": true
+              },
+              "ErrorBehavior": {
+                  "DataErrorPolicy": "LOG_ERROR",
+                  "DataTruncationErrorPolicy": "LOG_ERROR",
+                  "DataErrorEscalationPolicy": "SUSPEND_TABLE",
+                  "DataErrorEscalationCount": 0,
+                  "TableErrorPolicy": "SUSPEND_TABLE",
+                  "TableErrorEscalationPolicy": "STOP_TASK",
+                  "TableErrorEscalationCount": 0,
+                  "RecoverableErrorCount": -1,
+                  "RecoverableErrorInterval": 5,
+                  "RecoverableErrorThrottling": true,
+                  "RecoverableErrorThrottlingMax": 1800,
+                  "ApplyErrorDeletePolicy": "IGNORE_RECORD",
+                  "ApplyErrorInsertPolicy": "LOG_ERROR",
+                  "ApplyErrorUpdatePolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationPolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationCount": 0,
+                  "ApplyErrorFailOnTruncationDdl": false,
+                  "FullLoadIgnoreConflicts": true,
+                  "FailOnTransactionConsistencyBreached": false,
+                  "FailOnNoTablesCaptured": false
+              },
+              "ChangeProcessingTuning": {
+                  "BatchApplyPreserveTransaction": true,
+                  "BatchApplyTimeoutMin": 1,
+                  "BatchApplyTimeoutMax": 30,
+                  "BatchApplyMemoryLimit": 500,
+                  "BatchSplitSize": 0,
+                  "MinTransactionSize": 1000,
+                  "CommitTimeout": 1,
+                  "MemoryLimitTotal": 1024,
+                  "MemoryKeepTime": 60,
+                  "StatementCacheSize": 50
+              }
+          }'
+          - TARGET_SCHEMA: "CNXDMSAW"
+      Tags:
+        - Key: Name
+          Value: 
+            Fn::Join: ["-", [Ref: 'AWS::StackName' , "DETECTCONFIGURATIONS"]]
+        - Key: "organization:clasificacion-confidencialidad"
+          Value: "restringida"
+        - Key: "organization:clasificacion-integridad"
+          Value: "impacto critico"
+        - Key: "organization:clasificacion-disponibilidad"
+          Value: "impacto critico"
+        - Key: "organization:dominio-informacion"
+          Value: "no"
+        - Key: "organization:datos-personales"
+          Value: "no"
+        - Key: "organization:cumplimiento"
+          Value: "no"
+
+##tabla AUDITS schema SCHDETID84
+  rReplicationTaskAUDITSSCHDETID84:
+    Condition: cenvintermedio
+    Type: AWS::DMS::ReplicationTask
+    DependsOn: rDMSReplicationInstance
+    Properties:
+      MigrationType: full-load-and-cdc
+      ReplicationInstanceArn: !Ref rDMSReplicationInstance
+      ReplicationTaskIdentifier: 
+        Fn::Join: [ "-", [ Ref: pImportBase, "full-load-cdc", "tbl-AUDITS-SCHDETID84"]]
+      SourceEndpointArn: !Ref rSourceDatabase
+      TargetEndpointArn: !Ref rTargetDatabase
+      TableMappings: 
+        Fn::Sub:
+          -  
+            '{
+              "rules": [
+                {
+                  "rule-type": "transformation",
+                  "rule-id": "1",
+                  "rule-name": "1",
+                  "rule-target": "schema",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "%"
+                  },
+                  "rule-action": "rename",
+                  "value": "${TARGET_SCHEMA}",
+                  "old-value": null
+                },
+                      {
+                  "rule-type": "selection",
+                  "rule-id": "2",
+                  "rule-name": "2",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "AUDITS%"
+                  },
+                  "rule-action": "include",
+                  "filters": []
+                }
+              ]
+            }'
+          - SOURCE_SCHEMA: "SCHDETID84"
+            TARGET_SCHEMA: "SCHDETID84"
+      ReplicationTaskSettings: 
+        Fn::Sub:
+          - '{
+              "TargetMetadata": {
+                  "TargetSchema": "${TARGET_SCHEMA}",
+                  "SupportLobs": true,
+                  "FullLobMode": false,
+                  "LobChunkSize": 0,
+                  "LimitedSizeLobMode": true,
+                  "LobMaxSize": 64,
+                  "InlineLobMaxSize": 0,
+                  "LoadMaxFileSize": 0,
+                  "ParallelLoadThreads": 0,
+                  "ParallelLoadBufferSize": 0,
+                  "BatchApplyEnabled": false,
+                  "TaskRecoveryTableEnabled": false,
+                  "ParallelLoadQueuesPerThread": 0,
+                  "ParallelApplyThreads": 0,
+                  "ParallelApplyBufferSize": 0,
+                  "ParallelApplyQueuesPerThread": 0
+              },
+              "FullLoadSettings": {
+                  "TargetTablePrepMode": "TRUNCATE_BEFORE_LOAD",
+                  "CreatePkAfterFullLoad": false,
+                  "StopTaskCachedChangesApplied": false,
+                  "StopTaskCachedChangesNotApplied": false,
+                  "MaxFullLoadSubTasks": 8,
+                  "TransactionConsistencyTimeout": 600,
+                  "CommitRate": 10000
+              },
+              "Logging": {
+                  "EnableLogging": true,
+                  "LogComponents": [
+                      {
+                          "Id": "TRANSFORMATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_UNLOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "IO",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_LOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "PERFORMANCE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_CAPTURE",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "SORTER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "REST_SERVER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "VALIDATOR_EXT",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_APPLY",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TASK_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TABLES_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "METADATA_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_FACTORY",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMON",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "ADDONS",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "DATA_STRUCTURE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMUNICATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_TRANSFER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      }
+                  ]
+              },
+              "ControlTablesSettings": {
+                  "historyTimeslotInMinutes": 5,
+                  "ControlSchema": "",
+                  "HistoryTimeslotInMinutes": 5,
+                  "HistoryTableEnabled": false,
+                  "SuspendedTablesTableEnabled": false,
+                  "StatusTableEnabled": false
+              },
+              "StreamBufferSettings": {
+                  "StreamBufferCount": 3,
+                  "StreamBufferSizeInMB": 8,
+                  "CtrlStreamBufferSizeInMB": 5
+              },
+              "ChangeProcessingDdlHandlingPolicy": {
+                  "HandleSourceTableDropped": true,
+                  "HandleSourceTableTruncated": true,
+                  "HandleSourceTableAltered": true
+              },
+              "ErrorBehavior": {
+                  "DataErrorPolicy": "LOG_ERROR",
+                  "DataTruncationErrorPolicy": "LOG_ERROR",
+                  "DataErrorEscalationPolicy": "SUSPEND_TABLE",
+                  "DataErrorEscalationCount": 0,
+                  "TableErrorPolicy": "SUSPEND_TABLE",
+                  "TableErrorEscalationPolicy": "STOP_TASK",
+                  "TableErrorEscalationCount": 0,
+                  "RecoverableErrorCount": -1,
+                  "RecoverableErrorInterval": 5,
+                  "RecoverableErrorThrottling": true,
+                  "RecoverableErrorThrottlingMax": 1800,
+                  "ApplyErrorDeletePolicy": "IGNORE_RECORD",
+                  "ApplyErrorInsertPolicy": "LOG_ERROR",
+                  "ApplyErrorUpdatePolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationPolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationCount": 0,
+                  "ApplyErrorFailOnTruncationDdl": false,
+                  "FullLoadIgnoreConflicts": true,
+                  "FailOnTransactionConsistencyBreached": false,
+                  "FailOnNoTablesCaptured": false
+              },
+              "ChangeProcessingTuning": {
+                  "BatchApplyPreserveTransaction": true,
+                  "BatchApplyTimeoutMin": 1,
+                  "BatchApplyTimeoutMax": 30,
+                  "BatchApplyMemoryLimit": 500,
+                  "BatchSplitSize": 0,
+                  "MinTransactionSize": 1000,
+                  "CommitTimeout": 1,
+                  "MemoryLimitTotal": 1024,
+                  "MemoryKeepTime": 60,
+                  "StatementCacheSize": 50
+              }
+          }'
+          - TARGET_SCHEMA: "CNXDMSAW"
+      Tags:
+        - Key: Name
+          Value: 
+            Fn::Join: ["-", [Ref: 'AWS::StackName' , "AUDITS"]]
+        - Key: "organization:clasificacion-confidencialidad"
+          Value: "restringida"
+        - Key: "organization:clasificacion-integridad"
+          Value: "impacto critico"
+        - Key: "organization:clasificacion-disponibilidad"
+          Value: "impacto critico"
+        - Key: "organization:dominio-informacion"
+          Value: "no"
+        - Key: "organization:datos-personales"
+          Value: "no"
+        - Key: "organization:cumplimiento"
+          Value: "no"
+
+
+
+##tabla REPORT_PAGE schema SCHDETID84
+  rReplicationTaskREPORTPAGECHDETID84:
+    Condition: cenvintermedio
+    Type: AWS::DMS::ReplicationTask
+    DependsOn: rDMSReplicationInstance
+    Properties:
+      MigrationType: full-load-and-cdc
+      ReplicationInstanceArn: !Ref rDMSReplicationInstance
+      ReplicationTaskIdentifier: 
+        Fn::Join: [ "-", [ Ref: pImportBase, "full-load-cdc", "tbl-REPORT-PAGE-SCHDETID84"]]
+      SourceEndpointArn: !Ref rSourceDatabase
+      TargetEndpointArn: !Ref rTargetDatabase
+      TableMappings: 
+        Fn::Sub:
+          -  
+            '{
+              "rules": [
+                {
+                  "rule-type": "transformation",
+                  "rule-id": "1",
+                  "rule-name": "1",
+                  "rule-target": "schema",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "%"
+                  },
+                  "rule-action": "rename",
+                  "value": "${TARGET_SCHEMA}",
+                  "old-value": null
+                },
+                      {
+                  "rule-type": "selection",
+                  "rule-id": "2",
+                  "rule-name": "2",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "REPORT_PAGE%"
+                  },
+                  "rule-action": "include",
+                  "filters": []
+                }
+              ]
+            }'
+          - SOURCE_SCHEMA: "SCHDETID84"
+            TARGET_SCHEMA: "SCHDETID84"
+      ReplicationTaskSettings: 
+        Fn::Sub:
+          - '{
+              "TargetMetadata": {
+                  "TargetSchema": "${TARGET_SCHEMA}",
+                  "SupportLobs": true,
+                  "FullLobMode": false,
+                  "LobChunkSize": 0,
+                  "LimitedSizeLobMode": true,
+                  "LobMaxSize": 64,
+                  "InlineLobMaxSize": 0,
+                  "LoadMaxFileSize": 0,
+                  "ParallelLoadThreads": 0,
+                  "ParallelLoadBufferSize": 0,
+                  "BatchApplyEnabled": false,
+                  "TaskRecoveryTableEnabled": false,
+                  "ParallelLoadQueuesPerThread": 0,
+                  "ParallelApplyThreads": 0,
+                  "ParallelApplyBufferSize": 0,
+                  "ParallelApplyQueuesPerThread": 0
+              },
+              "FullLoadSettings": {
+                  "TargetTablePrepMode": "TRUNCATE_BEFORE_LOAD",
+                  "CreatePkAfterFullLoad": false,
+                  "StopTaskCachedChangesApplied": false,
+                  "StopTaskCachedChangesNotApplied": false,
+                  "MaxFullLoadSubTasks": 8,
+                  "TransactionConsistencyTimeout": 600,
+                  "CommitRate": 10000
+              },
+              "Logging": {
+                  "EnableLogging": true,
+                  "LogComponents": [
+                      {
+                          "Id": "TRANSFORMATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_UNLOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "IO",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_LOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "PERFORMANCE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_CAPTURE",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "SORTER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "REST_SERVER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "VALIDATOR_EXT",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_APPLY",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TASK_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TABLES_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "METADATA_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_FACTORY",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMON",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "ADDONS",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "DATA_STRUCTURE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMUNICATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_TRANSFER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      }
+                  ]
+              },
+              "ControlTablesSettings": {
+                  "historyTimeslotInMinutes": 5,
+                  "ControlSchema": "",
+                  "HistoryTimeslotInMinutes": 5,
+                  "HistoryTableEnabled": false,
+                  "SuspendedTablesTableEnabled": false,
+                  "StatusTableEnabled": false
+              },
+              "StreamBufferSettings": {
+                  "StreamBufferCount": 3,
+                  "StreamBufferSizeInMB": 8,
+                  "CtrlStreamBufferSizeInMB": 5
+              },
+              "ChangeProcessingDdlHandlingPolicy": {
+                  "HandleSourceTableDropped": true,
+                  "HandleSourceTableTruncated": true,
+                  "HandleSourceTableAltered": true
+              },
+              "ErrorBehavior": {
+                  "DataErrorPolicy": "LOG_ERROR",
+                  "DataTruncationErrorPolicy": "LOG_ERROR",
+                  "DataErrorEscalationPolicy": "SUSPEND_TABLE",
+                  "DataErrorEscalationCount": 0,
+                  "TableErrorPolicy": "SUSPEND_TABLE",
+                  "TableErrorEscalationPolicy": "STOP_TASK",
+                  "TableErrorEscalationCount": 0,
+                  "RecoverableErrorCount": -1,
+                  "RecoverableErrorInterval": 5,
+                  "RecoverableErrorThrottling": true,
+                  "RecoverableErrorThrottlingMax": 1800,
+                  "ApplyErrorDeletePolicy": "IGNORE_RECORD",
+                  "ApplyErrorInsertPolicy": "LOG_ERROR",
+                  "ApplyErrorUpdatePolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationPolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationCount": 0,
+                  "ApplyErrorFailOnTruncationDdl": false,
+                  "FullLoadIgnoreConflicts": true,
+                  "FailOnTransactionConsistencyBreached": false,
+                  "FailOnNoTablesCaptured": false
+              },
+              "ChangeProcessingTuning": {
+                  "BatchApplyPreserveTransaction": true,
+                  "BatchApplyTimeoutMin": 1,
+                  "BatchApplyTimeoutMax": 30,
+                  "BatchApplyMemoryLimit": 500,
+                  "BatchSplitSize": 0,
+                  "MinTransactionSize": 1000,
+                  "CommitTimeout": 1,
+                  "MemoryLimitTotal": 1024,
+                  "MemoryKeepTime": 60,
+                  "StatementCacheSize": 50
+              }
+          }'
+          - TARGET_SCHEMA: "CNXDMSAW"
+      Tags:
+        - Key: Name
+          Value: 
+            Fn::Join: ["-", [Ref: 'AWS::StackName' , "REPORT_PAGE"]]
+        - Key: "organization:clasificacion-confidencialidad"
+          Value: "restringida"
+        - Key: "organization:clasificacion-integridad"
+          Value: "impacto critico"
+        - Key: "organization:clasificacion-disponibilidad"
+          Value: "impacto critico"
+        - Key: "organization:dominio-informacion"
+          Value: "no"
+        - Key: "organization:datos-personales"
+          Value: "no"
+        - Key: "organization:cumplimiento"
+          Value: "no"
+
+##tabla OTP_CONFIGURATION schema SCHDETID84
+  rReplicationTaskOTBMAILHISTORY:
+    Condition: cenvintermedio
+    Type: AWS::DMS::ReplicationTask
+    DependsOn: rDMSReplicationInstance
+    Properties:
+      MigrationType: full-load-and-cdc
+      ReplicationInstanceArn: !Ref rDMSReplicationInstance
+      ReplicationTaskIdentifier: 
+        Fn::Join: [ "-", [ Ref: pImportBase, "full-load-cdc", "tbl-OTBMAILHISTORY-SCHDETID84"]]
+      SourceEndpointArn: !Ref rSourceDatabase
+      TargetEndpointArn: !Ref rTargetDatabase
+      TableMappings: 
+        Fn::Sub:
+          -  
+            '{
+              "rules": [
+                {
+                  "rule-type": "transformation",
+                  "rule-id": "1",
+                  "rule-name": "1",
+                  "rule-target": "schema",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "%"
+                  },
+                  "rule-action": "rename",
+                  "value": "${TARGET_SCHEMA}",
+                  "old-value": null
+                },
+                      {
+                  "rule-type": "selection",
+                  "rule-id": "2",
+                  "rule-name": "2",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "OTBMAIL_HISTORY%"
+                  },
+                  "rule-action": "include",
+                  "filters": []
+                }
+              ]
+            }'
+          - SOURCE_SCHEMA: "SCHDETID84"
+            TARGET_SCHEMA: "SCHDETID84"
+      ReplicationTaskSettings: 
+        Fn::Sub:
+          - '{
+              "TargetMetadata": {
+                  "TargetSchema": "${TARGET_SCHEMA}",
+                  "SupportLobs": true,
+                  "FullLobMode": false,
+                  "LobChunkSize": 0,
+                  "LimitedSizeLobMode": true,
+                  "LobMaxSize": 64,
+                  "InlineLobMaxSize": 0,
+                  "LoadMaxFileSize": 0,
+                  "ParallelLoadThreads": 0,
+                  "ParallelLoadBufferSize": 0,
+                  "BatchApplyEnabled": false,
+                  "TaskRecoveryTableEnabled": false,
+                  "ParallelLoadQueuesPerThread": 0,
+                  "ParallelApplyThreads": 0,
+                  "ParallelApplyBufferSize": 0,
+                  "ParallelApplyQueuesPerThread": 0
+              },
+              "FullLoadSettings": {
+                  "TargetTablePrepMode": "TRUNCATE_BEFORE_LOAD",
+                  "CreatePkAfterFullLoad": false,
+                  "StopTaskCachedChangesApplied": false,
+                  "StopTaskCachedChangesNotApplied": false,
+                  "MaxFullLoadSubTasks": 8,
+                  "TransactionConsistencyTimeout": 600,
+                  "CommitRate": 10000
+              },
+              "Logging": {
+                  "EnableLogging": true,
+                  "LogComponents": [
+                      {
+                          "Id": "TRANSFORMATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_UNLOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "IO",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_LOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "PERFORMANCE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_CAPTURE",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "SORTER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "REST_SERVER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "VALIDATOR_EXT",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_APPLY",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TASK_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TABLES_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "METADATA_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_FACTORY",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMON",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "ADDONS",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "DATA_STRUCTURE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMUNICATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_TRANSFER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      }
+                  ]
+              },
+              "ControlTablesSettings": {
+                  "historyTimeslotInMinutes": 5,
+                  "ControlSchema": "",
+                  "HistoryTimeslotInMinutes": 5,
+                  "HistoryTableEnabled": false,
+                  "SuspendedTablesTableEnabled": false,
+                  "StatusTableEnabled": false
+              },
+              "StreamBufferSettings": {
+                  "StreamBufferCount": 3,
+                  "StreamBufferSizeInMB": 8,
+                  "CtrlStreamBufferSizeInMB": 5
+              },
+              "ChangeProcessingDdlHandlingPolicy": {
+                  "HandleSourceTableDropped": true,
+                  "HandleSourceTableTruncated": true,
+                  "HandleSourceTableAltered": true
+              },
+              "ErrorBehavior": {
+                  "DataErrorPolicy": "LOG_ERROR",
+                  "DataTruncationErrorPolicy": "LOG_ERROR",
+                  "DataErrorEscalationPolicy": "SUSPEND_TABLE",
+                  "DataErrorEscalationCount": 0,
+                  "TableErrorPolicy": "SUSPEND_TABLE",
+                  "TableErrorEscalationPolicy": "STOP_TASK",
+                  "TableErrorEscalationCount": 0,
+                  "RecoverableErrorCount": -1,
+                  "RecoverableErrorInterval": 5,
+                  "RecoverableErrorThrottling": true,
+                  "RecoverableErrorThrottlingMax": 1800,
+                  "ApplyErrorDeletePolicy": "IGNORE_RECORD",
+                  "ApplyErrorInsertPolicy": "LOG_ERROR",
+                  "ApplyErrorUpdatePolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationPolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationCount": 0,
+                  "ApplyErrorFailOnTruncationDdl": false,
+                  "FullLoadIgnoreConflicts": true,
+                  "FailOnTransactionConsistencyBreached": false,
+                  "FailOnNoTablesCaptured": false
+              },
+              "ChangeProcessingTuning": {
+                  "BatchApplyPreserveTransaction": true,
+                  "BatchApplyTimeoutMin": 1,
+                  "BatchApplyTimeoutMax": 30,
+                  "BatchApplyMemoryLimit": 500,
+                  "BatchSplitSize": 0,
+                  "MinTransactionSize": 1000,
+                  "CommitTimeout": 1,
+                  "MemoryLimitTotal": 1024,
+                  "MemoryKeepTime": 60,
+                  "StatementCacheSize": 50
+              }
+          }'
+          - TARGET_SCHEMA: "CNXDMSAW"
+      Tags:
+        - Key: Name
+          Value: 
+            Fn::Join: ["-", [Ref: 'AWS::StackName' , "OTBMAILHISTORY"]]
+        - Key: "organization:clasificacion-confidencialidad"
+          Value: "restringida"
+        - Key: "organization:clasificacion-integridad"
+          Value: "impacto critico"
+        - Key: "organization:clasificacion-disponibilidad"
+          Value: "impacto critico"
+        - Key: "organization:dominio-informacion"
+          Value: "no"
+        - Key: "organization:datos-personales"
+          Value: "no"
+        - Key: "organization:cumplimiento"
+          Value: "no"
+
+
+
+
+
+##tabla DETECTCONFIGURATIONS schema SCHDETID84
+  rReplicationTaskMOBILEAUTHHISTORYSCHDETID84:
+    Condition: cenvintermedio
+    Type: AWS::DMS::ReplicationTask
+    DependsOn: rDMSReplicationInstance
+    Properties:
+      MigrationType: full-load-and-cdc
+      ReplicationInstanceArn: !Ref rDMSReplicationInstance
+      ReplicationTaskIdentifier: 
+        Fn::Join: [ "-", [ Ref: pImportBase, "full-load-cdc", "tbl-MOBILEAUTHHISTORY-SCHDETID84"]]
+      SourceEndpointArn: !Ref rSourceDatabase
+      TargetEndpointArn: !Ref rTargetDatabase
+      TableMappings: 
+        Fn::Sub:
+          -  
+            '{
+              "rules": [
+                {
+                  "rule-type": "transformation",
+                  "rule-id": "1",
+                  "rule-name": "1",
+                  "rule-target": "schema",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "%"
+                  },
+                  "rule-action": "rename",
+                  "value": "${TARGET_SCHEMA}",
+                  "old-value": null
+                },
+                      {
+                  "rule-type": "selection",
+                  "rule-id": "2",
+                  "rule-name": "2",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "MOBILE_AUTH_HISTORY%"
+                  },
+                  "rule-action": "include",
+                  "filters": []
+                }
+              ]
+            }'
+          - SOURCE_SCHEMA: "SCHDETID84"
+            TARGET_SCHEMA: "SCHDETID84"
+      ReplicationTaskSettings: 
+        Fn::Sub:
+          - '{
+              "TargetMetadata": {
+                  "TargetSchema": "${TARGET_SCHEMA}",
+                  "SupportLobs": true,
+                  "FullLobMode": false,
+                  "LobChunkSize": 0,
+                  "LimitedSizeLobMode": true,
+                  "LobMaxSize": 64,
+                  "InlineLobMaxSize": 0,
+                  "LoadMaxFileSize": 0,
+                  "ParallelLoadThreads": 0,
+                  "ParallelLoadBufferSize": 0,
+                  "BatchApplyEnabled": false,
+                  "TaskRecoveryTableEnabled": false,
+                  "ParallelLoadQueuesPerThread": 0,
+                  "ParallelApplyThreads": 0,
+                  "ParallelApplyBufferSize": 0,
+                  "ParallelApplyQueuesPerThread": 0
+              },
+              "FullLoadSettings": {
+                  "TargetTablePrepMode": "TRUNCATE_BEFORE_LOAD",
+                  "CreatePkAfterFullLoad": false,
+                  "StopTaskCachedChangesApplied": false,
+                  "StopTaskCachedChangesNotApplied": false,
+                  "MaxFullLoadSubTasks": 8,
+                  "TransactionConsistencyTimeout": 600,
+                  "CommitRate": 10000
+              },
+              "Logging": {
+                  "EnableLogging": true,
+                  "LogComponents": [
+                      {
+                          "Id": "TRANSFORMATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_UNLOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "IO",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_LOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "PERFORMANCE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_CAPTURE",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "SORTER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "REST_SERVER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "VALIDATOR_EXT",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_APPLY",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TASK_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TABLES_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "METADATA_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_FACTORY",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMON",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "ADDONS",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "DATA_STRUCTURE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMUNICATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_TRANSFER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      }
+                  ]
+              },
+              "ControlTablesSettings": {
+                  "historyTimeslotInMinutes": 5,
+                  "ControlSchema": "",
+                  "HistoryTimeslotInMinutes": 5,
+                  "HistoryTableEnabled": false,
+                  "SuspendedTablesTableEnabled": false,
+                  "StatusTableEnabled": false
+              },
+              "StreamBufferSettings": {
+                  "StreamBufferCount": 3,
+                  "StreamBufferSizeInMB": 8,
+                  "CtrlStreamBufferSizeInMB": 5
+              },
+              "ChangeProcessingDdlHandlingPolicy": {
+                  "HandleSourceTableDropped": true,
+                  "HandleSourceTableTruncated": true,
+                  "HandleSourceTableAltered": true
+              },
+              "ErrorBehavior": {
+                  "DataErrorPolicy": "LOG_ERROR",
+                  "DataTruncationErrorPolicy": "LOG_ERROR",
+                  "DataErrorEscalationPolicy": "SUSPEND_TABLE",
+                  "DataErrorEscalationCount": 0,
+                  "TableErrorPolicy": "SUSPEND_TABLE",
+                  "TableErrorEscalationPolicy": "STOP_TASK",
+                  "TableErrorEscalationCount": 0,
+                  "RecoverableErrorCount": -1,
+                  "RecoverableErrorInterval": 5,
+                  "RecoverableErrorThrottling": true,
+                  "RecoverableErrorThrottlingMax": 1800,
+                  "ApplyErrorDeletePolicy": "IGNORE_RECORD",
+                  "ApplyErrorInsertPolicy": "LOG_ERROR",
+                  "ApplyErrorUpdatePolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationPolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationCount": 0,
+                  "ApplyErrorFailOnTruncationDdl": false,
+                  "FullLoadIgnoreConflicts": true,
+                  "FailOnTransactionConsistencyBreached": false,
+                  "FailOnNoTablesCaptured": false
+              },
+              "ChangeProcessingTuning": {
+                  "BatchApplyPreserveTransaction": true,
+                  "BatchApplyTimeoutMin": 1,
+                  "BatchApplyTimeoutMax": 30,
+                  "BatchApplyMemoryLimit": 500,
+                  "BatchSplitSize": 0,
+                  "MinTransactionSize": 1000,
+                  "CommitTimeout": 1,
+                  "MemoryLimitTotal": 1024,
+                  "MemoryKeepTime": 60,
+                  "StatementCacheSize": 50
+              }
+          }'
+          - TARGET_SCHEMA: "CNXDMSAW"
+      Tags:
+        - Key: Name
+          Value: 
+            Fn::Join: ["-", [Ref: 'AWS::StackName' , "MOBILE_AUTH_HISTORY"]]
+        - Key: "organization:clasificacion-confidencialidad"
+          Value: "restringida"
+        - Key: "organization:clasificacion-integridad"
+          Value: "impacto critico"
+        - Key: "organization:clasificacion-disponibilidad"
+          Value: "impacto critico"
+        - Key: "organization:dominio-informacion"
+          Value: "no"
+        - Key: "organization:datos-personales"
+          Value: "no"
+        - Key: "organization:cumplimiento"
+          Value: "no"
+
+
+##tabla DETECTCONFIGURATIONS schema YOUR_PROJECT_NAME_OWNER
+  rReplicationTaskDETECTCONFIGURATIONSDETOWNER:
+    Condition: cenvintermedio
+    Type: AWS::DMS::ReplicationTask
+    DependsOn: rDMSReplicationInstance
+    Properties:
+      MigrationType: full-load-and-cdc
+      ReplicationInstanceArn: !Ref rDMSReplicationInstance
+      ReplicationTaskIdentifier: 
+        Fn::Join: [ "-", [ Ref: pImportBase, "full-load-cdc", "tbl-DETECTCONFIGURATIONS-DETOWNER"]]
+      SourceEndpointArn: !Ref rSourceDatabase
+      TargetEndpointArn: !Ref rTargetDatabase
+      TableMappings: 
+        Fn::Sub:
+          -  
+            '{
+              "rules": [
+                {
+                  "rule-type": "transformation",
+                  "rule-id": "1",
+                  "rule-name": "1",
+                  "rule-target": "schema",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "%"
+                  },
+                  "rule-action": "rename",
+                  "value": "${TARGET_SCHEMA}",
+                  "old-value": null
+                },
+                      {
+                  "rule-type": "selection",
+                  "rule-id": "2",
+                  "rule-name": "2",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "DETECT_COMMON_CONFIGURATIONS%"
+                  },
+                  "rule-action": "include",
+                  "filters": []
+                }
+              ]
+            }'
+          - SOURCE_SCHEMA: "YOUR_PROJECT_NAME_OWNER"
+            TARGET_SCHEMA: "YOUR_PROJECT_NAME_OWNER"
+      ReplicationTaskSettings: 
+        Fn::Sub:
+          - '{
+              "TargetMetadata": {
+                  "TargetSchema": "${TARGET_SCHEMA}",
+                  "SupportLobs": true,
+                  "FullLobMode": false,
+                  "LobChunkSize": 0,
+                  "LimitedSizeLobMode": true,
+                  "LobMaxSize": 64,
+                  "InlineLobMaxSize": 0,
+                  "LoadMaxFileSize": 0,
+                  "ParallelLoadThreads": 0,
+                  "ParallelLoadBufferSize": 0,
+                  "BatchApplyEnabled": false,
+                  "TaskRecoveryTableEnabled": false,
+                  "ParallelLoadQueuesPerThread": 0,
+                  "ParallelApplyThreads": 0,
+                  "ParallelApplyBufferSize": 0,
+                  "ParallelApplyQueuesPerThread": 0
+              },
+              "FullLoadSettings": {
+                  "TargetTablePrepMode": "TRUNCATE_BEFORE_LOAD",
+                  "CreatePkAfterFullLoad": false,
+                  "StopTaskCachedChangesApplied": false,
+                  "StopTaskCachedChangesNotApplied": false,
+                  "MaxFullLoadSubTasks": 8,
+                  "TransactionConsistencyTimeout": 600,
+                  "CommitRate": 10000
+              },
+              "Logging": {
+                  "EnableLogging": true,
+                  "LogComponents": [
+                      {
+                          "Id": "TRANSFORMATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_UNLOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "IO",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_LOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "PERFORMANCE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_CAPTURE",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "SORTER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "REST_SERVER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "VALIDATOR_EXT",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_APPLY",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TASK_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TABLES_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "METADATA_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_FACTORY",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMON",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "ADDONS",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "DATA_STRUCTURE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMUNICATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_TRANSFER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      }
+                  ]
+              },
+              "ControlTablesSettings": {
+                  "historyTimeslotInMinutes": 5,
+                  "ControlSchema": "",
+                  "HistoryTimeslotInMinutes": 5,
+                  "HistoryTableEnabled": false,
+                  "SuspendedTablesTableEnabled": false,
+                  "StatusTableEnabled": false
+              },
+              "StreamBufferSettings": {
+                  "StreamBufferCount": 3,
+                  "StreamBufferSizeInMB": 8,
+                  "CtrlStreamBufferSizeInMB": 5
+              },
+              "ChangeProcessingDdlHandlingPolicy": {
+                  "HandleSourceTableDropped": true,
+                  "HandleSourceTableTruncated": true,
+                  "HandleSourceTableAltered": true
+              },
+              "ErrorBehavior": {
+                  "DataErrorPolicy": "LOG_ERROR",
+                  "DataTruncationErrorPolicy": "LOG_ERROR",
+                  "DataErrorEscalationPolicy": "SUSPEND_TABLE",
+                  "DataErrorEscalationCount": 0,
+                  "TableErrorPolicy": "SUSPEND_TABLE",
+                  "TableErrorEscalationPolicy": "STOP_TASK",
+                  "TableErrorEscalationCount": 0,
+                  "RecoverableErrorCount": -1,
+                  "RecoverableErrorInterval": 5,
+                  "RecoverableErrorThrottling": true,
+                  "RecoverableErrorThrottlingMax": 1800,
+                  "ApplyErrorDeletePolicy": "IGNORE_RECORD",
+                  "ApplyErrorInsertPolicy": "LOG_ERROR",
+                  "ApplyErrorUpdatePolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationPolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationCount": 0,
+                  "ApplyErrorFailOnTruncationDdl": false,
+                  "FullLoadIgnoreConflicts": true,
+                  "FailOnTransactionConsistencyBreached": false,
+                  "FailOnNoTablesCaptured": false
+              },
+              "ChangeProcessingTuning": {
+                  "BatchApplyPreserveTransaction": true,
+                  "BatchApplyTimeoutMin": 1,
+                  "BatchApplyTimeoutMax": 30,
+                  "BatchApplyMemoryLimit": 500,
+                  "BatchSplitSize": 0,
+                  "MinTransactionSize": 1000,
+                  "CommitTimeout": 1,
+                  "MemoryLimitTotal": 1024,
+                  "MemoryKeepTime": 60,
+                  "StatementCacheSize": 50
+              }
+          }'
+          - TARGET_SCHEMA: "CNXDMSAW"
+      Tags:
+        - Key: Name
+          Value: 
+            Fn::Join: ["-", [Ref: 'AWS::StackName' , "DETECTCONFIGURATIONS"]]
+        - Key: "organization:clasificacion-confidencialidad"
+          Value: "restringida"
+        - Key: "organization:clasificacion-integridad"
+          Value: "impacto critico"
+        - Key: "organization:clasificacion-disponibilidad"
+          Value: "impacto critico"
+        - Key: "organization:dominio-informacion"
+          Value: "no"
+        - Key: "organization:datos-personales"
+          Value: "no"
+        - Key: "organization:cumplimiento"
+          Value: "no"
+
+  rReplicationSCHDETIPDN:
+    Condition: cenvPdn
+    Type: AWS::DMS::ReplicationTask
+    DependsOn: rDMSReplicationInstance
+    Properties:
+      MigrationType: full-load-and-cdc
+      ReplicationInstanceArn: !Ref rDMSReplicationInstance
+      ReplicationTaskIdentifier: 
+        Fn::Join: [ "-", [ Ref: pImportBase, "full-load-and-cdc", "SCHDETIPDN"]]
+      SourceEndpointArn: !Ref rSourceDatabase
+      TargetEndpointArn: !Ref rTargetDatabase
+      TableMappings: 
+        Fn::Sub:
+          -  
+            '{
+              "rules": [
+                {
+                  "rule-type": "transformation",
+                  "rule-id": "1",
+                  "rule-name": "1",
+                  "rule-target": "schema",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "%"
+                  },
+                  "rule-action": "rename",
+                  "value": "${TARGET_SCHEMA}",
+                  "old-value": null
+                },
+                      {
+                  "rule-type": "selection",
+                  "rule-id": "2",
+                  "rule-name": "2",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "DETECT_COMMON_CONFIGURATIONS%"
+                  },
+                  "rule-action": "exclude"
+
+                },
+                {
+                  "rule-type": "selection",
+                  "rule-id": "3",
+                  "rule-name": "3",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "OTBMAIL_HISTORY%"
+                  },
+                  "rule-action": "exclude"
+
+                },
+                {
+                  "rule-type": "selection",
+                  "rule-id": "4",
+                  "rule-name": "4",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "MOBILE_AUTH_HISTORY%"
+                  },
+                  "rule-action": "exclude"
+
+                },
+                {
+                  "rule-type": "selection",
+                  "rule-id": "5",
+                  "rule-name": "5",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "AUDITS%"
+                  },
+                  "rule-action": "exclude"
+
+                },
+                {
+                  "rule-type": "selection",
+                  "rule-id": "6",
+                  "rule-name": "6",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "REPORT_PAGE%"
+                  },
+                  "rule-action": "exclude"
+
+                },
+                                {
+                  "rule-type": "selection",
+                  "rule-id": "7",
+                  "rule-name": "7",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "%$%"
+                  },
+                  "rule-action": "exclude"
+
+                },
+                {
+                  "rule-type": "selection",
+                  "rule-id": "8",
+                  "rule-name": "8",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "%"
+                  },
+                  "rule-action": "include",
+                  "filters": []
+                }
+              ]
+            }'
+          - SOURCE_SCHEMA: "SCHDETID"
+            TARGET_SCHEMA: "SCHDETID"
+      ReplicationTaskSettings: 
+        Fn::Sub:
+          - '{
+              "TargetMetadata": {
+                  "TargetSchema": "${TARGET_SCHEMA}",
+                  "SupportLobs": true,
+                  "FullLobMode": false,
+                  "LobChunkSize": 64,
+                  "LimitedSizeLobMode": false,
+                  "LobMaxSize": 32,
+                  "InlineLobMaxSize": 0,
+                  "LoadMaxFileSize": 0,
+                  "ParallelLoadThreads": 0,
+                  "ParallelLoadBufferSize": 0,
+                  "BatchApplyEnabled": false,
+                  "TaskRecoveryTableEnabled": false,
+                  "ParallelLoadQueuesPerThread": 0,
+                  "ParallelApplyThreads": 0,
+                  "ParallelApplyBufferSize": 0,
+                  "ParallelApplyQueuesPerThread": 0
+              },
+              "FullLoadSettings": {
+                  "TargetTablePrepMode": "TRUNCATE_BEFORE_LOAD",
+                  "CreatePkAfterFullLoad": false,
+                  "StopTaskCachedChangesApplied": false,
+                  "StopTaskCachedChangesNotApplied": false,
+                  "MaxFullLoadSubTasks": 3,
+                  "TransactionConsistencyTimeout": 600,
+                  "CommitRate": 100
+              },
+              "Logging": {
+                  "EnableLogging": true,
+                  "LogComponents": [
+                      {
+                          "Id": "TRANSFORMATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_UNLOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "IO",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_LOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "PERFORMANCE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_CAPTURE",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "SORTER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "REST_SERVER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "VALIDATOR_EXT",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_APPLY",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TASK_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TABLES_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "METADATA_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_FACTORY",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMON",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "ADDONS",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "DATA_STRUCTURE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMUNICATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_TRANSFER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      }
+                  ]
+              },
+              "ControlTablesSettings": {
+                  "historyTimeslotInMinutes": 5,
+                  "ControlSchema": "",
+                  "HistoryTimeslotInMinutes": 5,
+                  "HistoryTableEnabled": false,
+                  "SuspendedTablesTableEnabled": false,
+                  "StatusTableEnabled": false
+              },
+              "StreamBufferSettings": {
+                  "StreamBufferCount": 3,
+                  "StreamBufferSizeInMB": 8,
+                  "CtrlStreamBufferSizeInMB": 5
+              },
+              "ChangeProcessingDdlHandlingPolicy": {
+                  "HandleSourceTableDropped": true,
+                  "HandleSourceTableTruncated": true,
+                  "HandleSourceTableAltered": true
+              },
+              "ErrorBehavior": {
+                  "DataErrorPolicy": "LOG_ERROR",
+                  "DataTruncationErrorPolicy": "LOG_ERROR",
+                  "DataErrorEscalationPolicy": "SUSPEND_TABLE",
+                  "DataErrorEscalationCount": 0,
+                  "TableErrorPolicy": "SUSPEND_TABLE",
+                  "TableErrorEscalationPolicy": "STOP_TASK",
+                  "TableErrorEscalationCount": 0,
+                  "RecoverableErrorCount": -1,
+                  "RecoverableErrorInterval": 5,
+                  "RecoverableErrorThrottling": true,
+                  "RecoverableErrorThrottlingMax": 1800,
+                  "ApplyErrorDeletePolicy": "IGNORE_RECORD",
+                  "ApplyErrorInsertPolicy": "LOG_ERROR",
+                  "ApplyErrorUpdatePolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationPolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationCount": 0,
+                  "ApplyErrorFailOnTruncationDdl": false,
+                  "FullLoadIgnoreConflicts": true,
+                  "FailOnTransactionConsistencyBreached": false,
+                  "FailOnNoTablesCaptured": false
+              },
+              "ChangeProcessingTuning": {
+                  "BatchApplyPreserveTransaction": true,
+                  "BatchApplyTimeoutMin": 1,
+                  "BatchApplyTimeoutMax": 30,
+                  "BatchApplyMemoryLimit": 500,
+                  "BatchSplitSize": 0,
+                  "MinTransactionSize": 1000,
+                  "CommitTimeout": 1,
+                  "MemoryLimitTotal": 1024,
+                  "MemoryKeepTime": 60,
+                  "StatementCacheSize": 50
+              }
+          }'
+          - TARGET_SCHEMA: "CNXDMSAW"
+      Tags:
+        - Key: Name
+          Value: 
+            Fn::Join: ["-", [Ref: 'AWS::StackName' , "ReplicationSCHDETIDPDN"]]
+        - Key: "organization:clasificacion-confidencialidad"
+          Value: "restringida"
+        - Key: "organization:clasificacion-integridad"
+          Value: "impacto critico"
+        - Key: "organization:clasificacion-disponibilidad"
+          Value: "impacto critico"
+        - Key: "organization:dominio-informacion"
+          Value: "no"
+        - Key: "organization:datos-personales"
+          Value: "no"
+        - Key: "organization:cumplimiento"
+          Value: "no"
+
+##tabla DETECTCONFIGURATIONS schema SCHDETID PDN
+  rReplicationTaskDETECTCONFIGURATIONSSCHDETIDPDN1:
+    Condition: cenvPdn
+    Type: AWS::DMS::ReplicationTask
+    DependsOn: rDMSReplicationInstance
+    Properties:
+      MigrationType: full-load-and-cdc
+      ReplicationInstanceArn: !Ref rDMSReplicationInstance
+      ReplicationTaskIdentifier: 
+        Fn::Join: [ "-", [ Ref: pImportBase, "full-load-cdc", "tbl-DETECTCONFIGURATIONS-SCHDETIDPDN1"]]
+      SourceEndpointArn: !Ref rSourceDatabase
+      TargetEndpointArn: !Ref rTargetDatabase
+      TableMappings: 
+        Fn::Sub:
+          -  
+            '{
+              "rules": [
+                {
+                  "rule-type": "transformation",
+                  "rule-id": "1",
+                  "rule-name": "1",
+                  "rule-target": "schema",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "%"
+                  },
+                  "rule-action": "rename",
+                  "value": "${TARGET_SCHEMA}",
+                  "old-value": null
+                },
+                      {
+                  "rule-type": "selection",
+                  "rule-id": "2",
+                  "rule-name": "2",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "DETECT_COMMON_CONFIGURATIONS%"
+                  },
+                  "rule-action": "include",
+                  "filters": []
+                }
+              ]
+            }'
+          - SOURCE_SCHEMA: "SCHDETID"
+            TARGET_SCHEMA: "SCHDETID"
+      ReplicationTaskSettings: 
+        Fn::Sub:
+          - '{
+              "TargetMetadata": {
+                  "TargetSchema": "${TARGET_SCHEMA}",
+                  "SupportLobs": true,
+                  "FullLobMode": false,
+                  "LobChunkSize": 0,
+                  "LimitedSizeLobMode": true,
+                  "LobMaxSize": 32,
+                  "InlineLobMaxSize": 0,
+                  "LoadMaxFileSize": 0,
+                  "ParallelLoadThreads": 0,
+                  "ParallelLoadBufferSize": 0,
+                  "BatchApplyEnabled": false,
+                  "TaskRecoveryTableEnabled": false,
+                  "ParallelLoadQueuesPerThread": 0,
+                  "ParallelApplyThreads": 0,
+                  "ParallelApplyBufferSize": 0,
+                  "ParallelApplyQueuesPerThread": 0
+              },
+              "FullLoadSettings": {
+                  "TargetTablePrepMode": "TRUNCATE_BEFORE_LOAD",
+                  "CreatePkAfterFullLoad": false,
+                  "StopTaskCachedChangesApplied": false,
+                  "StopTaskCachedChangesNotApplied": false,
+                  "MaxFullLoadSubTasks": 8,
+                  "TransactionConsistencyTimeout": 600,
+                  "CommitRate": 10000
+              },
+              "Logging": {
+                  "EnableLogging": true,
+                  "LogComponents": [
+                      {
+                          "Id": "TRANSFORMATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_UNLOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "IO",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_LOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "PERFORMANCE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_CAPTURE",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "SORTER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "REST_SERVER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "VALIDATOR_EXT",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_APPLY",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TASK_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TABLES_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "METADATA_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_FACTORY",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMON",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "ADDONS",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "DATA_STRUCTURE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMUNICATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_TRANSFER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      }
+                  ]
+              },
+              "ControlTablesSettings": {
+                  "historyTimeslotInMinutes": 5,
+                  "ControlSchema": "",
+                  "HistoryTimeslotInMinutes": 5,
+                  "HistoryTableEnabled": false,
+                  "SuspendedTablesTableEnabled": false,
+                  "StatusTableEnabled": false
+              },
+              "StreamBufferSettings": {
+                  "StreamBufferCount": 3,
+                  "StreamBufferSizeInMB": 8,
+                  "CtrlStreamBufferSizeInMB": 5
+              },
+              "ChangeProcessingDdlHandlingPolicy": {
+                  "HandleSourceTableDropped": true,
+                  "HandleSourceTableTruncated": true,
+                  "HandleSourceTableAltered": true
+              },
+              "ErrorBehavior": {
+                  "DataErrorPolicy": "LOG_ERROR",
+                  "DataTruncationErrorPolicy": "LOG_ERROR",
+                  "DataErrorEscalationPolicy": "SUSPEND_TABLE",
+                  "DataErrorEscalationCount": 0,
+                  "TableErrorPolicy": "SUSPEND_TABLE",
+                  "TableErrorEscalationPolicy": "STOP_TASK",
+                  "TableErrorEscalationCount": 0,
+                  "RecoverableErrorCount": -1,
+                  "RecoverableErrorInterval": 5,
+                  "RecoverableErrorThrottling": true,
+                  "RecoverableErrorThrottlingMax": 1800,
+                  "ApplyErrorDeletePolicy": "IGNORE_RECORD",
+                  "ApplyErrorInsertPolicy": "LOG_ERROR",
+                  "ApplyErrorUpdatePolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationPolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationCount": 0,
+                  "ApplyErrorFailOnTruncationDdl": false,
+                  "FullLoadIgnoreConflicts": true,
+                  "FailOnTransactionConsistencyBreached": false,
+                  "FailOnNoTablesCaptured": false
+              },
+              "ChangeProcessingTuning": {
+                  "BatchApplyPreserveTransaction": true,
+                  "BatchApplyTimeoutMin": 1,
+                  "BatchApplyTimeoutMax": 30,
+                  "BatchApplyMemoryLimit": 500,
+                  "BatchSplitSize": 0,
+                  "MinTransactionSize": 1000,
+                  "CommitTimeout": 1,
+                  "MemoryLimitTotal": 1024,
+                  "MemoryKeepTime": 60,
+                  "StatementCacheSize": 50
+              }
+          }'
+          - TARGET_SCHEMA: "CNXDMSAW"
+      Tags:
+        - Key: Name
+          Value: 
+            Fn::Join: ["-", [Ref: 'AWS::StackName' , "DETECTCONFIGURATIONSPDN"]]
+        - Key: "organization:clasificacion-confidencialidad"
+          Value: "restringida"
+        - Key: "organization:clasificacion-integridad"
+          Value: "impacto critico"
+        - Key: "organization:clasificacion-disponibilidad"
+          Value: "impacto critico"
+        - Key: "organization:dominio-informacion"
+          Value: "no"
+        - Key: "organization:datos-personales"
+          Value: "no"
+        - Key: "organization:cumplimiento"
+          Value: "no"
+
+##tabla AUDITS schema SCHDETIDPDN
+  rReplicationTaskAUDITSSCHDETIDPDN1:
+    Condition: cenvPdn
+    Type: AWS::DMS::ReplicationTask
+    DependsOn: rDMSReplicationInstance
+    Properties:
+      MigrationType: full-load-and-cdc
+      ReplicationInstanceArn: !Ref rDMSReplicationInstance
+      ReplicationTaskIdentifier: 
+        Fn::Join: [ "-", [ Ref: pImportBase, "full-load-cdc", "tbl-AUDITS-SCHDETIDPDN1"]]
+      SourceEndpointArn: !Ref rSourceDatabase
+      TargetEndpointArn: !Ref rTargetDatabase
+      TableMappings: 
+        Fn::Sub:
+          -  
+            '{
+              "rules": [
+                {
+                  "rule-type": "transformation",
+                  "rule-id": "1",
+                  "rule-name": "1",
+                  "rule-target": "schema",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "%"
+                  },
+                  "rule-action": "rename",
+                  "value": "${TARGET_SCHEMA}",
+                  "old-value": null
+                },
+                      {
+                  "rule-type": "selection",
+                  "rule-id": "2",
+                  "rule-name": "2",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "AUDITS%"
+                  },
+                  "rule-action": "include",
+                  "filters": []
+                }
+              ]
+            }'
+          - SOURCE_SCHEMA: "SCHDETID"
+            TARGET_SCHEMA: "SCHDETID"
+      ReplicationTaskSettings: 
+        Fn::Sub:
+          - '{
+              "TargetMetadata": {
+                  "TargetSchema": "${TARGET_SCHEMA}",
+                  "SupportLobs": true,
+                  "FullLobMode": false,
+                  "LobChunkSize": 0,
+                  "LimitedSizeLobMode": true,
+                  "LobMaxSize": 32,
+                  "InlineLobMaxSize": 0,
+                  "LoadMaxFileSize": 0,
+                  "ParallelLoadThreads": 0,
+                  "ParallelLoadBufferSize": 0,
+                  "BatchApplyEnabled": false,
+                  "TaskRecoveryTableEnabled": false,
+                  "ParallelLoadQueuesPerThread": 0,
+                  "ParallelApplyThreads": 0,
+                  "ParallelApplyBufferSize": 0,
+                  "ParallelApplyQueuesPerThread": 0
+              },
+              "FullLoadSettings": {
+                  "TargetTablePrepMode": "TRUNCATE_BEFORE_LOAD",
+                  "CreatePkAfterFullLoad": false,
+                  "StopTaskCachedChangesApplied": false,
+                  "StopTaskCachedChangesNotApplied": false,
+                  "MaxFullLoadSubTasks": 8,
+                  "TransactionConsistencyTimeout": 600,
+                  "CommitRate": 10000
+              },
+              "Logging": {
+                  "EnableLogging": true,
+                  "LogComponents": [
+                      {
+                          "Id": "TRANSFORMATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_UNLOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "IO",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_LOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "PERFORMANCE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_CAPTURE",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "SORTER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "REST_SERVER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "VALIDATOR_EXT",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_APPLY",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TASK_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TABLES_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "METADATA_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_FACTORY",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMON",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "ADDONS",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "DATA_STRUCTURE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMUNICATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_TRANSFER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      }
+                  ]
+              },
+              "ControlTablesSettings": {
+                  "historyTimeslotInMinutes": 5,
+                  "ControlSchema": "",
+                  "HistoryTimeslotInMinutes": 5,
+                  "HistoryTableEnabled": false,
+                  "SuspendedTablesTableEnabled": false,
+                  "StatusTableEnabled": false
+              },
+              "StreamBufferSettings": {
+                  "StreamBufferCount": 3,
+                  "StreamBufferSizeInMB": 8,
+                  "CtrlStreamBufferSizeInMB": 5
+              },
+              "ChangeProcessingDdlHandlingPolicy": {
+                  "HandleSourceTableDropped": true,
+                  "HandleSourceTableTruncated": true,
+                  "HandleSourceTableAltered": true
+              },
+              "ErrorBehavior": {
+                  "DataErrorPolicy": "LOG_ERROR",
+                  "DataTruncationErrorPolicy": "LOG_ERROR",
+                  "DataErrorEscalationPolicy": "SUSPEND_TABLE",
+                  "DataErrorEscalationCount": 0,
+                  "TableErrorPolicy": "SUSPEND_TABLE",
+                  "TableErrorEscalationPolicy": "STOP_TASK",
+                  "TableErrorEscalationCount": 0,
+                  "RecoverableErrorCount": -1,
+                  "RecoverableErrorInterval": 5,
+                  "RecoverableErrorThrottling": true,
+                  "RecoverableErrorThrottlingMax": 1800,
+                  "ApplyErrorDeletePolicy": "IGNORE_RECORD",
+                  "ApplyErrorInsertPolicy": "LOG_ERROR",
+                  "ApplyErrorUpdatePolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationPolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationCount": 0,
+                  "ApplyErrorFailOnTruncationDdl": false,
+                  "FullLoadIgnoreConflicts": true,
+                  "FailOnTransactionConsistencyBreached": false,
+                  "FailOnNoTablesCaptured": false
+              },
+              "ChangeProcessingTuning": {
+                  "BatchApplyPreserveTransaction": true,
+                  "BatchApplyTimeoutMin": 1,
+                  "BatchApplyTimeoutMax": 30,
+                  "BatchApplyMemoryLimit": 500,
+                  "BatchSplitSize": 0,
+                  "MinTransactionSize": 1000,
+                  "CommitTimeout": 1,
+                  "MemoryLimitTotal": 1024,
+                  "MemoryKeepTime": 60,
+                  "StatementCacheSize": 50
+              }
+          }'
+          - TARGET_SCHEMA: "CNXDMSAW"
+      Tags:
+        - Key: Name
+          Value: 
+            Fn::Join: ["-", [Ref: 'AWS::StackName' , "AUDITSPDN"]]
+        - Key: "organization:clasificacion-confidencialidad"
+          Value: "restringida"
+        - Key: "organization:clasificacion-integridad"
+          Value: "impacto critico"
+        - Key: "organization:clasificacion-disponibilidad"
+          Value: "impacto critico"
+        - Key: "organization:dominio-informacion"
+          Value: "no"
+        - Key: "organization:datos-personales"
+          Value: "no"
+        - Key: "organization:cumplimiento"
+          Value: "no"
+
+##tabla REPORT_PAGE schema SCHDETIDPDN
+  rReplicationTaskREPORTPAGECHDETIDPDN1:
+    Condition: cenvPdn
+    Type: AWS::DMS::ReplicationTask
+    DependsOn: rDMSReplicationInstance
+    Properties:
+      MigrationType: full-load-and-cdc
+      ReplicationInstanceArn: !Ref rDMSReplicationInstance
+      ReplicationTaskIdentifier: 
+        Fn::Join: [ "-", [ Ref: pImportBase, "full-load-cdc", "tbl-REPORT-PAGE-SCHDETID-PDN1"]]
+      SourceEndpointArn: !Ref rSourceDatabase
+      TargetEndpointArn: !Ref rTargetDatabase
+      TableMappings: 
+        Fn::Sub:
+          -  
+            '{
+              "rules": [
+                {
+                  "rule-type": "transformation",
+                  "rule-id": "1",
+                  "rule-name": "1",
+                  "rule-target": "schema",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "%"
+                  },
+                  "rule-action": "rename",
+                  "value": "${TARGET_SCHEMA}",
+                  "old-value": null
+                },
+                      {
+                  "rule-type": "selection",
+                  "rule-id": "2",
+                  "rule-name": "2",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "REPORT_PAGE%"
+                  },
+                  "rule-action": "include",
+                  "filters": []
+                }
+              ]
+            }'
+          - SOURCE_SCHEMA: "SCHDETID"
+            TARGET_SCHEMA: "SCHDETID"
+      ReplicationTaskSettings: 
+        Fn::Sub:
+          - '{
+              "TargetMetadata": {
+                  "TargetSchema": "${TARGET_SCHEMA}",
+                  "SupportLobs": true,
+                  "FullLobMode": false,
+                  "LobChunkSize": 0,
+                  "LimitedSizeLobMode": true,
+                  "LobMaxSize": 32,
+                  "InlineLobMaxSize": 0,
+                  "LoadMaxFileSize": 0,
+                  "ParallelLoadThreads": 0,
+                  "ParallelLoadBufferSize": 0,
+                  "BatchApplyEnabled": false,
+                  "TaskRecoveryTableEnabled": false,
+                  "ParallelLoadQueuesPerThread": 0,
+                  "ParallelApplyThreads": 0,
+                  "ParallelApplyBufferSize": 0,
+                  "ParallelApplyQueuesPerThread": 0
+              },
+              "FullLoadSettings": {
+                  "TargetTablePrepMode": "TRUNCATE_BEFORE_LOAD",
+                  "CreatePkAfterFullLoad": false,
+                  "StopTaskCachedChangesApplied": false,
+                  "StopTaskCachedChangesNotApplied": false,
+                  "MaxFullLoadSubTasks": 8,
+                  "TransactionConsistencyTimeout": 600,
+                  "CommitRate": 10000
+              },
+              "Logging": {
+                  "EnableLogging": true,
+                  "LogComponents": [
+                      {
+                          "Id": "TRANSFORMATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_UNLOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "IO",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_LOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "PERFORMANCE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_CAPTURE",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "SORTER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "REST_SERVER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "VALIDATOR_EXT",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_APPLY",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TASK_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TABLES_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "METADATA_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_FACTORY",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMON",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "ADDONS",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "DATA_STRUCTURE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMUNICATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_TRANSFER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      }
+                  ]
+              },
+              "ControlTablesSettings": {
+                  "historyTimeslotInMinutes": 5,
+                  "ControlSchema": "",
+                  "HistoryTimeslotInMinutes": 5,
+                  "HistoryTableEnabled": false,
+                  "SuspendedTablesTableEnabled": false,
+                  "StatusTableEnabled": false
+              },
+              "StreamBufferSettings": {
+                  "StreamBufferCount": 3,
+                  "StreamBufferSizeInMB": 8,
+                  "CtrlStreamBufferSizeInMB": 5
+              },
+              "ChangeProcessingDdlHandlingPolicy": {
+                  "HandleSourceTableDropped": true,
+                  "HandleSourceTableTruncated": true,
+                  "HandleSourceTableAltered": true
+              },
+              "ErrorBehavior": {
+                  "DataErrorPolicy": "LOG_ERROR",
+                  "DataTruncationErrorPolicy": "LOG_ERROR",
+                  "DataErrorEscalationPolicy": "SUSPEND_TABLE",
+                  "DataErrorEscalationCount": 0,
+                  "TableErrorPolicy": "SUSPEND_TABLE",
+                  "TableErrorEscalationPolicy": "STOP_TASK",
+                  "TableErrorEscalationCount": 0,
+                  "RecoverableErrorCount": -1,
+                  "RecoverableErrorInterval": 5,
+                  "RecoverableErrorThrottling": true,
+                  "RecoverableErrorThrottlingMax": 1800,
+                  "ApplyErrorDeletePolicy": "IGNORE_RECORD",
+                  "ApplyErrorInsertPolicy": "LOG_ERROR",
+                  "ApplyErrorUpdatePolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationPolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationCount": 0,
+                  "ApplyErrorFailOnTruncationDdl": false,
+                  "FullLoadIgnoreConflicts": true,
+                  "FailOnTransactionConsistencyBreached": false,
+                  "FailOnNoTablesCaptured": false
+              },
+              "ChangeProcessingTuning": {
+                  "BatchApplyPreserveTransaction": true,
+                  "BatchApplyTimeoutMin": 1,
+                  "BatchApplyTimeoutMax": 30,
+                  "BatchApplyMemoryLimit": 500,
+                  "BatchSplitSize": 0,
+                  "MinTransactionSize": 1000,
+                  "CommitTimeout": 1,
+                  "MemoryLimitTotal": 1024,
+                  "MemoryKeepTime": 60,
+                  "StatementCacheSize": 50
+              }
+          }'
+          - TARGET_SCHEMA: "CNXDMSAW"
+      Tags:
+        - Key: Name
+          Value: 
+            Fn::Join: ["-", [Ref: 'AWS::StackName' , "REPORT_PAGE_PDN"]]
+        - Key: "organization:clasificacion-confidencialidad"
+          Value: "restringida"
+        - Key: "organization:clasificacion-integridad"
+          Value: "impacto critico"
+        - Key: "organization:clasificacion-disponibilidad"
+          Value: "impacto critico"
+        - Key: "organization:dominio-informacion"
+          Value: "no"
+        - Key: "organization:datos-personales"
+          Value: "no"
+        - Key: "organization:cumplimiento"
+          Value: "no"
+
+
+
+##tabla DETECTCONFIGURATIONS schema SCHDETID PDN
+  rReplicationTaskMOBILEAUTHHISTORYSCHDETIDPDN:
+    Condition: cenvPdn
+    Type: AWS::DMS::ReplicationTask
+    DependsOn: rDMSReplicationInstance
+    Properties:
+      MigrationType: full-load-and-cdc
+      ReplicationInstanceArn: !Ref rDMSReplicationInstance
+      ReplicationTaskIdentifier: 
+        Fn::Join: [ "-", [ Ref: pImportBase, "full-load-cdc", "tbl-MOBILEAUTHHISTORY-SCHDETID-PDN"]]
+      SourceEndpointArn: !Ref rSourceDatabase
+      TargetEndpointArn: !Ref rTargetDatabase
+      TableMappings: 
+        Fn::Sub:
+          -  
+            '{
+              "rules": [
+                {
+                  "rule-type": "transformation",
+                  "rule-id": "1",
+                  "rule-name": "1",
+                  "rule-target": "schema",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "%"
+                  },
+                  "rule-action": "rename",
+                  "value": "${TARGET_SCHEMA}",
+                  "old-value": null
+                },
+                      {
+                  "rule-type": "selection",
+                  "rule-id": "2",
+                  "rule-name": "2",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "MOBILE_AUTH_HISTORY%"
+                  },
+                  "rule-action": "include",
+                  "filters": []
+                }
+              ]
+            }'
+          - SOURCE_SCHEMA: "SCHDETID"
+            TARGET_SCHEMA: "SCHDETID"
+      ReplicationTaskSettings: 
+        Fn::Sub:
+          - '{
+              "TargetMetadata": {
+                  "TargetSchema": "${TARGET_SCHEMA}",
+                  "SupportLobs": true,
+                  "FullLobMode": false,
+                  "LobChunkSize": 0,
+                  "LimitedSizeLobMode": true,
+                  "LobMaxSize": 16,
+                  "InlineLobMaxSize": 0,
+                  "LoadMaxFileSize": 0,
+                  "ParallelLoadThreads": 0,
+                  "ParallelLoadBufferSize": 0,
+                  "BatchApplyEnabled": false,
+                  "TaskRecoveryTableEnabled": false,
+                  "ParallelLoadQueuesPerThread": 0,
+                  "ParallelApplyThreads": 0,
+                  "ParallelApplyBufferSize": 0,
+                  "ParallelApplyQueuesPerThread": 0
+              },
+              "FullLoadSettings": {
+                  "TargetTablePrepMode": "TRUNCATE_BEFORE_LOAD",
+                  "CreatePkAfterFullLoad": false,
+                  "StopTaskCachedChangesApplied": false,
+                  "StopTaskCachedChangesNotApplied": false,
+                  "MaxFullLoadSubTasks": 8,
+                  "TransactionConsistencyTimeout": 600,
+                  "CommitRate": 10000
+              },
+              "Logging": {
+                  "EnableLogging": true,
+                  "LogComponents": [
+                      {
+                          "Id": "TRANSFORMATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_UNLOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "IO",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_LOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "PERFORMANCE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_CAPTURE",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "SORTER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "REST_SERVER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "VALIDATOR_EXT",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_APPLY",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TASK_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TABLES_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "METADATA_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_FACTORY",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMON",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "ADDONS",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "DATA_STRUCTURE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMUNICATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_TRANSFER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      }
+                  ]
+              },
+              "ControlTablesSettings": {
+                  "historyTimeslotInMinutes": 5,
+                  "ControlSchema": "",
+                  "HistoryTimeslotInMinutes": 5,
+                  "HistoryTableEnabled": false,
+                  "SuspendedTablesTableEnabled": false,
+                  "StatusTableEnabled": false
+              },
+              "StreamBufferSettings": {
+                  "StreamBufferCount": 3,
+                  "StreamBufferSizeInMB": 8,
+                  "CtrlStreamBufferSizeInMB": 5
+              },
+              "ChangeProcessingDdlHandlingPolicy": {
+                  "HandleSourceTableDropped": true,
+                  "HandleSourceTableTruncated": true,
+                  "HandleSourceTableAltered": true
+              },
+              "ErrorBehavior": {
+                  "DataErrorPolicy": "LOG_ERROR",
+                  "DataTruncationErrorPolicy": "LOG_ERROR",
+                  "DataErrorEscalationPolicy": "SUSPEND_TABLE",
+                  "DataErrorEscalationCount": 0,
+                  "TableErrorPolicy": "SUSPEND_TABLE",
+                  "TableErrorEscalationPolicy": "STOP_TASK",
+                  "TableErrorEscalationCount": 0,
+                  "RecoverableErrorCount": -1,
+                  "RecoverableErrorInterval": 5,
+                  "RecoverableErrorThrottling": true,
+                  "RecoverableErrorThrottlingMax": 1800,
+                  "ApplyErrorDeletePolicy": "IGNORE_RECORD",
+                  "ApplyErrorInsertPolicy": "LOG_ERROR",
+                  "ApplyErrorUpdatePolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationPolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationCount": 0,
+                  "ApplyErrorFailOnTruncationDdl": false,
+                  "FullLoadIgnoreConflicts": true,
+                  "FailOnTransactionConsistencyBreached": false,
+                  "FailOnNoTablesCaptured": false
+              },
+              "ChangeProcessingTuning": {
+                  "BatchApplyPreserveTransaction": true,
+                  "BatchApplyTimeoutMin": 1,
+                  "BatchApplyTimeoutMax": 30,
+                  "BatchApplyMemoryLimit": 500,
+                  "BatchSplitSize": 0,
+                  "MinTransactionSize": 1000,
+                  "CommitTimeout": 1,
+                  "MemoryLimitTotal": 1024,
+                  "MemoryKeepTime": 60,
+                  "StatementCacheSize": 50
+              }
+          }'
+          - TARGET_SCHEMA: "CNXDMSAW"
+      Tags:
+        - Key: Name
+          Value: 
+            Fn::Join: ["-", [Ref: 'AWS::StackName' , "MOBILE_AUTH_HISTORY_PDN"]]
+        - Key: "organization:clasificacion-confidencialidad"
+          Value: "restringida"
+        - Key: "organization:clasificacion-integridad"
+          Value: "impacto critico"
+        - Key: "organization:clasificacion-disponibilidad"
+          Value: "impacto critico"
+        - Key: "organization:dominio-informacion"
+          Value: "no"
+        - Key: "organization:datos-personales"
+          Value: "no"
+        - Key: "organization:cumplimiento"
+          Value: "no"
+
+
+
+#### Tablas de gran tamaño
+
+  rReplicationTaskOTBMAILHISTORY:
+    Condition: cenvPdn
+    Type: AWS::DMS::ReplicationTask
+    DependsOn: rDMSReplicationInstance
+    Properties:
+      MigrationType: full-load-and-cdc
+      ReplicationInstanceArn: !Ref rDMSReplicationInstance
+      ReplicationTaskIdentifier: 
+        Fn::Join: [ "-", [ Ref: pImportBase, "full-load-cdc", "tbl-OTBMAILHISTORYSCHDETID-PDN"]]
+      SourceEndpointArn: !Ref rSourceDatabase
+      TargetEndpointArn: !Ref rTargetDatabase
+      TableMappings: 
+        Fn::Sub:
+          -  
+            '{
+              "rules": [
+                {
+                  "rule-type": "transformation",
+                  "rule-id": "1",
+                  "rule-name": "1",
+                  "rule-target": "schema",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "%"
+                  },
+                  "rule-action": "rename",
+                  "value": "${TARGET_SCHEMA}",
+                  "old-value": null
+                },
+                      {
+                  "rule-type": "selection",
+                  "rule-id": "2",
+                  "rule-name": "2",
+                  "object-locator": {
+                    "schema-name": "${SOURCE_SCHEMA}",
+                    "table-name": "OTBMAIL_HISTORY%"
+                  },
+                  "rule-action": "include",
+                  "filters": []
+                }
+              ]
+            }'
+          - SOURCE_SCHEMA: "SCHDETID"
+            TARGET_SCHEMA: "SCHDETID"
+      ReplicationTaskSettings: 
+        Fn::Sub:
+          - '{
+              "TargetMetadata": {
+                  "TargetSchema": "${TARGET_SCHEMA}",
+                  "SupportLobs": true,
+                  "FullLobMode": false,
+                  "LobChunkSize": 0,
+                  "LimitedSizeLobMode": true,
+                  "LobMaxSize": 64,
+                  "InlineLobMaxSize": 0,
+                  "LoadMaxFileSize": 0,
+                  "ParallelLoadThreads": 0,
+                  "ParallelLoadBufferSize": 0,
+                  "BatchApplyEnabled": false,
+                  "TaskRecoveryTableEnabled": false,
+                  "ParallelLoadQueuesPerThread": 0,
+                  "ParallelApplyThreads": 0,
+                  "ParallelApplyBufferSize": 0,
+                  "ParallelApplyQueuesPerThread": 0
+              },
+              "FullLoadSettings": {
+                  "TargetTablePrepMode": "TRUNCATE_BEFORE_LOAD",
+                  "CreatePkAfterFullLoad": false,
+                  "StopTaskCachedChangesApplied": false,
+                  "StopTaskCachedChangesNotApplied": false,
+                  "MaxFullLoadSubTasks": 8,
+                  "TransactionConsistencyTimeout": 600,
+                  "CommitRate": 10000
+              },
+              "Logging": {
+                  "EnableLogging": true,
+                  "LogComponents": [
+                      {
+                          "Id": "TRANSFORMATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_UNLOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "IO",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_LOAD",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "PERFORMANCE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "SOURCE_CAPTURE",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "SORTER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "REST_SERVER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "VALIDATOR_EXT",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "TARGET_APPLY",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TASK_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "TABLES_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEBUG"
+                      },
+                      {
+                          "Id": "METADATA_MANAGER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_FACTORY",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMON",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "ADDONS",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "DATA_STRUCTURE",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "COMMUNICATION",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      },
+                      {
+                          "Id": "FILE_TRANSFER",
+                          "Severity": "LOGGER_SEVERITY_DEFAULT"
+                      }
+                  ]
+              },
+              "ControlTablesSettings": {
+                  "historyTimeslotInMinutes": 5,
+                  "ControlSchema": "",
+                  "HistoryTimeslotInMinutes": 5,
+                  "HistoryTableEnabled": false,
+                  "SuspendedTablesTableEnabled": false,
+                  "StatusTableEnabled": false
+              },
+              "StreamBufferSettings": {
+                  "StreamBufferCount": 3,
+                  "StreamBufferSizeInMB": 8,
+                  "CtrlStreamBufferSizeInMB": 5
+              },
+              "ChangeProcessingDdlHandlingPolicy": {
+                  "HandleSourceTableDropped": true,
+                  "HandleSourceTableTruncated": true,
+                  "HandleSourceTableAltered": true
+              },
+              "ErrorBehavior": {
+                  "DataErrorPolicy": "LOG_ERROR",
+                  "DataTruncationErrorPolicy": "LOG_ERROR",
+                  "DataErrorEscalationPolicy": "SUSPEND_TABLE",
+                  "DataErrorEscalationCount": 0,
+                  "TableErrorPolicy": "SUSPEND_TABLE",
+                  "TableErrorEscalationPolicy": "STOP_TASK",
+                  "TableErrorEscalationCount": 0,
+                  "RecoverableErrorCount": -1,
+                  "RecoverableErrorInterval": 5,
+                  "RecoverableErrorThrottling": true,
+                  "RecoverableErrorThrottlingMax": 1800,
+                  "ApplyErrorDeletePolicy": "IGNORE_RECORD",
+                  "ApplyErrorInsertPolicy": "LOG_ERROR",
+                  "ApplyErrorUpdatePolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationPolicy": "LOG_ERROR",
+                  "ApplyErrorEscalationCount": 0,
+                  "ApplyErrorFailOnTruncationDdl": false,
+                  "FullLoadIgnoreConflicts": true,
+                  "FailOnTransactionConsistencyBreached": false,
+                  "FailOnNoTablesCaptured": false
+              },
+              "ChangeProcessingTuning": {
+                  "BatchApplyPreserveTransaction": true,
+                  "BatchApplyTimeoutMin": 1,
+                  "BatchApplyTimeoutMax": 30,
+                  "BatchApplyMemoryLimit": 500,
+                  "BatchSplitSize": 0,
+                  "MinTransactionSize": 1000,
+                  "CommitTimeout": 1,
+                  "MemoryLimitTotal": 1024,
+                  "MemoryKeepTime": 60,
+                  "StatementCacheSize": 50
+              }
+          }'
+          - TARGET_SCHEMA: "CNXDMSAW"
+      Tags:
+        - Key: Name
+          Value: 
+            Fn::Join: ["-", [Ref: 'AWS::StackName' , "OTBMAILHISTORY-PDN"]]
+        - Key: "organization:clasificacion-confidencialidad"
+          Value: "restringida"
+        - Key: "organization:clasificacion-integridad"
+          Value: "impacto critico"
+        - Key: "organization:clasificacion-disponibilidad"
+          Value: "impacto critico"
+        - Key: "organization:dominio-informacion"
+          Value: "no"
+        - Key: "organization:datos-personales"
+          Value: "no"
+        - Key: "organization:cumplimiento"
+          Value: "no"
+
+
+
+
+####
+  rKmsKeyParameterStore:
+    Type: AWS::SSM::Parameter
+    Properties: 
+        Description: Security Group DMS YOUR_PROJECT_NAME
+        Type: String
+        Name: !Ref 'AWS::StackName'
+        Value:
+            Ref: rSecurityGroupDMS

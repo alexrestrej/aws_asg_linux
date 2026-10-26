@@ -1,0 +1,312 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Template para el despliegue de recursos RDS.
+
+Parameters: #Parametros que necesitan los recursos para poder ser desplegados
+
+  pSSLcertificate:
+    Type: String
+    Description: Identificador del certificado SSL/TLS
+    Default: rds-ca-rsa2048-g1
+
+  pEnvironment:
+    Description: Ambiente donde se despliega.
+    Type: String
+
+  pPSRDS:
+    Description: SG RDS.
+    Type: String
+
+  pCreateReplicateRDS:
+    Description: Create replicate RDS.
+    Default: disable
+    AllowedValues:
+      - enable
+      - disable
+    Type: String    
+
+  pRdsclassintance:
+    Description: Class RDS Instance primary
+    Type: String
+
+  pDBName:
+    Description: Nombre de la base de datos.
+    Type: String
+    
+  pRdsBucketName:
+    Description: Buecket RDS
+    Type: String
+  
+  pDataBase:
+    Description: Motor de base de datos
+    Type: String
+
+  pAllocatedStorage:
+    Description: Tamano del almacenamiento en GB.
+    Type: String
+
+  pStorageType:
+    Description: El tipo de almacenamiento asociado con esta instancia de base de datos
+    Type: String
+
+
+  pIDreplicateRDS:
+    Description: ID RDS primary for replicate.
+    Type: String
+  
+
+  pImportBase:
+    Description: The base name of the imported objetcs
+    Type: String
+
+  pMaxAllocatedStorage:
+    Description: Tamano maximo de almacenamiento en GB.
+    Type: String
+
+  pSGTrasnversal:
+    Description: Seurity Group Transveral RDS.
+    Type: String
+
+  pSSMDBSGTransversal:
+    Description: Sg transversal para la ejecucion de Scripts Iniciales
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: lz_DbSgTransversal
+
+  pIopsAprovicionados:
+    Description: Iops Storage io1.
+    Type: String
+
+
+Mappings:
+  oracle:
+    dev:
+      DeletionProtection: false
+      # OptionGroup: "stackset-aws-addon-database-lb-YOUR_RESOURCE_ID-dbaoracleee19optiongroup-ifl9c7sm6cc7"
+      # parameterGroup: "aw0000-database-pdn-stack-dbaoracleee19parametergroup-hefg7h2x41sw"
+      PerformanceInsightsRetentionPeriod: 7
+      EnablePerformanceInsights: true
+      EnableCloudwatchLogsExports:
+        - trace
+        - audit
+        - alert
+        - listener
+    qa:
+      DeletionProtection: false
+      # OptionGroup: "stackset-aws-addon-database-lb-YOUR_RESOURCE_ID-dbaoracleee19optiongroup-ifl9c7sm6cc7"
+      # parameterGroup: "aw0000-database-pdn-stack-dbaoracleee19parametergroup-hefg7h2x41sw"
+      PerformanceInsightsRetentionPeriod: 7
+      EnablePerformanceInsights: true
+      EnableCloudwatchLogsExports:
+        - trace
+        - audit
+        - alert
+        - listener
+    pdn:
+      DeletionProtection: true
+      # OptionGroup: "stackset-aws-addon-database-lb-YOUR_RESOURCE_ID-dbaoracleee19optiongroup-ifl9c7sm6cc7"
+      # parameterGroup: "aw0000-database-pdn-stack-dbaoracleee19parametergroup-hefg7h2x41sw" 
+      PerformanceInsightsRetentionPeriod: 7
+      EnablePerformanceInsights: true
+      EnableCloudwatchLogsExports:
+        - trace
+        - audit
+        - alert
+        - listener
+
+
+Conditions:
+  envPdn:
+    Fn::Equals: [ Ref: pEnvironment, "pdn" ]
+  envDev:
+    Fn::Equals: [ Ref: pEnvironment, "dev" ]
+  envQa:
+    Fn::Equals: [ Ref: pEnvironment, "qa" ]
+
+  
+  cReplicateRDS:
+    Fn::Equals: [ Ref: pCreateReplicateRDS, enable ]
+      #- !Equals [Ref: pEnvironment, pdn]
+      #- !Equals [Ref: pCreateReplicateRDS, enable]
+
+  cTypeStorage:
+    Fn::And:
+      -  Fn::Equals: [Ref: pStorageType, "io1"]
+      -  !Not [!Equals  [Ref: pIopsAprovicionados, " "]]
+
+Resources:
+
+  rIAMRoleForRDS:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/YOUR_GOVERNANCE_BOUNDARY_POLICY
+      RoleName: 
+        Fn::Join: ["-", [Ref: 'AWS::StackName' , "role-rep"]]
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - rds.amazonaws.com
+                - monitoring.rds.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - s3:Get
+                  - s3:Put
+                  - s3:List
+                  - s3:AbortMultipartUpload
+                Resource:
+                  Fn::Sub: arn:aws:s3:::${pImportBase}-s3-rds
+                Effect: Allow
+          PolicyName: 
+            Fn::Join: ["-", [Ref: 'AWS::StackName' , "iam-policy-rep"]]
+        - PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - s3:Get
+                  - s3:Put
+                  - s3:List
+                  - s3:AbortMultipartUpload
+                Resource:
+                  Fn::Sub: arn:aws:s3:::${pImportBase}-s3-rds
+                Effect: Allow
+          PolicyName: 
+            Fn::Join: ["-", [Ref: 'AWS::StackName' , "iam-policy2-rep"]]
+
+#Rol para monitoreo de la BD  
+  rEnhancedMonitoringRole:
+    Type: AWS::IAM::Role
+    Properties:
+      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/YOUR_GOVERNANCE_BOUNDARY_POLICY
+      RoleName: 
+        Fn::Join: [ "-", [ Ref: pImportBase, "RDSEnhancedMonitoringRoleApp-rep"] ]
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: ''
+          Effect: Allow
+          Principal:
+            Service: monitoring.rds.amazonaws.com
+          Action: sts:AssumeRole
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole
+      Path: "/"
+
+
+
+  rDataBasesReplica:
+    Type: 'AWS::RDS::DBInstance'
+    Condition: cReplicateRDS
+    Properties:
+      CopyTagsToSnapshot: true
+      SourceDBInstanceIdentifier:  
+        !Join ["", ["{{resolve:ssm:", !Ref pIDreplicateRDS, "}}"]]
+      DBInstanceClass: 
+        Ref: pRdsclassintance
+      DBInstanceIdentifier: 
+        Fn::Join: [ "-", [Ref: pImportBase, "rdsrep"] ]
+      AllocatedStorage: 
+        Ref: pAllocatedStorage
+      MaxAllocatedStorage:
+        Ref: pMaxAllocatedStorage      
+      VPCSecurityGroups: 
+        - Ref: pPSRDS
+        - Ref: pSSMDBSGTransversal
+        - Ref: pSGTrasnversal
+      StorageType: 
+        Ref: pStorageType
+      Iops:
+        Fn::If:
+          - cTypeStorage
+          - Ref: pIopsAprovicionados
+          - Ref: AWS::NoValue
+      StorageEncrypted: true
+      DeletionProtection: 
+        Fn::FindInMap:
+        - Ref: pDataBase
+        - Ref: pEnvironment
+        - DeletionProtection
+      AutoMinorVersionUpgrade: true
+      AllowMajorVersionUpgrade: true
+      MultiAZ: false
+      PubliclyAccessible: false
+      PerformanceInsightsRetentionPeriod: 
+        Fn::FindInMap:
+        - Ref: pDataBase
+        - Ref: pEnvironment
+        - PerformanceInsightsRetentionPeriod
+      EnablePerformanceInsights: 
+        Fn::FindInMap:
+        - Ref: pDataBase
+        - Ref: pEnvironment
+        - EnablePerformanceInsights
+      KmsKeyId: 
+        Fn::Join: ["", ["{{resolve:ssm:", Ref: pImportBase, "-kms}}"]]
+      EnableCloudwatchLogsExports:
+        Fn::FindInMap:
+        - Ref: pDataBase
+        - Ref: pEnvironment
+        - EnableCloudwatchLogsExports
+      #BackupRetentionPeriod: 0
+      # DBParameterGroupName: 
+      #   Fn::FindInMap:
+      #   - Ref: pDataBase
+      #   - Ref: pEnvironment
+      #   - parameterGroup
+      # OptionGroupName: 
+      #   Fn::FindInMap:
+      #   - Ref: pDataBase
+      #   - Ref: pEnvironment
+      #   - OptionGroup
+      CACertificateIdentifier:
+        Ref: pSSLcertificate
+      AssociatedRoles:
+        - FeatureName: S3_INTEGRATION
+          RoleArn: 
+            Fn::GetAtt: rIAMRoleForRDS.Arn
+      MonitoringRoleArn: !GetAtt rEnhancedMonitoringRole.Arn
+      MonitoringInterval: 60
+      Tags:        
+        - Key: "organization:clasificacion-confidencialidad"
+          Value: "restringida"
+        - Key: "organization:clasificacion-integridad"
+          Value: "impacto critico"
+        - Key: "organization:clasificacion-disponibilidad"
+          Value: "impacto critico"
+        - Key: "organization:dominio-informacion"
+          Value: "no"
+        - Key: "organization:datos-personales"
+          Value: "no"
+        - Key: "organization:cumplimiento"
+          Value: "no"
+        - Key: "organization:bkmensual"
+          Value: "rds"
+        - Key: "organization:bkdiario"
+          Value: "rds"
+
+
+
+Outputs:
+  ReplicaDBCConnectionString:
+    Description: JDBC connection string for the replica database
+    Condition: cReplicateRDS
+    Value: 
+      Fn::Join:
+      - ''
+      - - 'jdbc:'
+        - Ref: pDataBase
+        - '://'
+        - Fn::GetAtt:
+          - rDataBasesReplica
+          - Endpoint.Address
+        - ':'
+        - Fn::GetAtt:
+          - rDataBasesReplica
+          - Endpoint.Port
+        - /
+        - Ref: pDBName

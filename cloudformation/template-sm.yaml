@@ -1,0 +1,382 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  This template create a Secret Manager with the values to manage the certificate private key (pfx) file
+  In non-productive environments creates
+
+Parameters:
+  pPSKMS:
+    Description: KMS value in Parameter Store
+    Type: String
+
+  # pProjectName:
+  #   Description: Nombre del proyecto.
+  #   Type: String
+  #   Default: Encuenta
+
+  pEnvironment:
+    Description: Application Environment
+    Type: String
+
+  pDBARole:
+    Description: ARN Role for DBA
+    Type: String
+
+  pCoesRole:
+    Description: ARN Role for COES
+    Type: String
+
+  pFullStackRole:
+    Description: ARN Role for FullStack
+    Type: String
+
+  pEC2InstanceRoleName:
+    Description: EC2 Instance Role
+    Type: String
+
+  pImportBase:
+    Description: The base name of the imported objetcs
+    Type: String
+
+  pUserschema:
+    Description: Usuario Schema YOUR_PROJECT_NAME
+    Type: String
+
+  pUserDatical:
+    Description: Usuario De conexión Datical
+    Type: String
+
+  pUserDynatrace:
+    Description: Usuario De conexión application monitoring service
+    Type: String
+
+  # pPasswordAD:
+  #   Description: Only for non-productive environments
+  #   Type: String
+  #   NoEcho: true
+
+  # pMonPort:
+  #   Description: port Monitoreo para auditoria de base de datos
+  #   Type: String
+
+  # pMonHost:
+  #   Description: host Monitoreo para auditoria de base de datos
+  #   Type: String
+
+  # pMonEngine:
+  #   Description: motor Monitoreo para auditoria de base de datos
+  #   Type: String
+
+  # pMonUsername:
+  #   Description: Usuario Monitoreo para auditoria de base de datos
+  #   Type: String
+
+  # pMonBD:
+  #   Description: BD Monitoreo para auditoria de base de datos euk
+  #   Type: String
+
+  # pMonBD1:
+  #   Description: BD Monitoreo para auditoria de base de datos oyd
+  #   Type: String
+
+  # pMonBD2:
+  #   Description: BD Monitoreo para auditoria de base de datos ordenes web
+  #   Type: String
+
+Conditions:
+
+  #   notPdn:
+  #     !Not [!Or [!Equals [!Ref pEnvironment, "prod"], !Equals [!Ref pEnvironment, "pdn"] ] ]
+
+  envPdn:
+    Fn::Equals: [Ref: pEnvironment, "pdn"]
+
+  envQa:
+    Fn::Equals: [Ref: pEnvironment, "qa"]
+
+  envDev:
+    Fn::Equals: [Ref: pEnvironment, "dev"]
+
+Resources:
+
+  #rSecretCert:
+  #Description: Secret to certificate private key
+  #Type: 'AWS::SecretsManager::Secret'
+  #Properties:
+  #Name: !Join ["", [!Ref 'AWS::StackName', "-cert"]]
+  #Description: This secret has a dynamically generated secret password.
+  #KmsKeyId: !Join ["", ["arn:aws:kms:",!Ref 'AWS::Region',":",!Ref 'AWS::AccountId',":key/{{resolve:ssm:", !Ref pPSKMS, "}}"]]
+  #GenerateSecretString:
+  #SecretStringTemplate: '{}'
+  #GenerateStringKey: password
+  #PasswordLength: 14
+  #ExcludeCharacters: '"@/\'
+
+  # rSecretADPasswd:
+  #   Description: Secret to store user password in Active Directory (non-productive environments)
+  #   Condition: notPdn
+  #   Type: 'AWS::SecretsManager::Secret'
+  #   Properties:
+  #     Name: !Join ["", [!Ref 'AWS::StackName', "-ad-passwd"]]
+  #     Description: This secret has a Active Directory password in non-productive environments
+  #     KmsKeyId: !Join ["", ["{{resolve:ssm:", !Ref pPSKMS, "}}"]]
+  #     SecretString:
+  #       !Join ["", ["{\"password\":\"", !Ref pPasswordAD, "\"}" ]]
+
+
+
+  rSecretSchemaRDS:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name:
+        Fn::Sub: '${pImportBase}-secretrds-SCHDETID'
+      Description:
+        Fn::Sub: 'Secreto del usuario de conexion de la BD YOUR_PROJECT_NAME.'
+      KmsKeyId:
+        Fn::Join: ["", ["{{resolve:ssm:", Ref: pImportBase, "-kms:1}}"]]
+      GenerateSecretString:
+        SecretStringTemplate:
+          !Join ["", ["{\"username\":\"", !Ref pUserschema, "\"}" ]]
+        GenerateStringKey: "password"
+        PasswordLength: 15
+        ExcludeCharacters: '"@/\&'
+
+  rSecretSchemaRDSResourcePolicy:
+     Type: AWS::SecretsManager::ResourcePolicy
+     Properties:
+       SecretId: !Ref rSecretSchemaRDS
+       ResourcePolicy:
+         Version: '2012-10-17'
+         Statement:
+           - Effect: "Deny"
+             Principal:
+               AWS: "*"
+             Action:
+               - "secretsmanager:GetSecretValue"
+             Resource: "*"
+             Condition:
+               StringNotEquals:
+                 aws:PrincipalArn:
+                   - !Join [ "", [ "arn:aws:iam::", !Ref 'AWS::AccountId',":role/YOUR_CLOUDFORMATION_DEPLOYMENT_ROLE" ]]
+                   - !Join ["",["arn:aws:iam::", !Ref 'AWS::AccountId',":role/","BCO-SR-SecretCertificate-Operation"]]
+                   - !Join [ "", [ "arn:aws:iam::", !Ref 'AWS::AccountId',":role/YOUR_CLOUDFORMATION_DEPLOYMENT_ROLE" ] ]
+                   - !Join [ "", [ "arn:aws:iam::", !Ref 'AWS::AccountId',":role/YOUR_DATABASE_OPERATIONS_ROLE" ] ]
+                   - !Ref pDBARole
+                   - !Ref pCoesRole
+                   - !If [ envDev, !Ref pFullStackRole, !Ref "AWS::NoValue" ]
+                   - !If [envQa, !Ref pEC2InstanceRoleName, !Ref "AWS::NoValue"]
+                   - !Join [ "", [ "arn:aws:iam::", !Ref 'AWS::AccountId',":root" ] ]
+
+  rSecretSchemaCNXRDS:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name:
+        Fn::Sub: '${pImportBase}-secretrds-BD-CNXDETID'
+      Description:
+        Fn::Sub: 'Secreto del usuario de conexion CNX de la BD YOUR_PROJECT_NAME.'
+      KmsKeyId:
+        Fn::Join: ["", ["{{resolve:ssm:", Ref: pImportBase, "-kms:1}}"]]
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "CNXDETID"}'
+        GenerateStringKey: "password"
+        PasswordLength: 15
+        ExcludeCharacters: '"@/\&'
+
+  rSecretSchemaCNXRDSResourcePolicy:
+    Type: AWS::SecretsManager::ResourcePolicy
+    Properties:
+      SecretId: !Ref rSecretSchemaCNXRDS
+      ResourcePolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: "Deny"
+            Principal:
+              AWS: "*"
+            Action:
+              - "secretsmanager:GetSecretValue"
+            Resource: "*"
+            Condition:
+              StringNotEquals:
+                aws:PrincipalArn:
+                  - !Join [ "", [ "arn:aws:iam::", !Ref 'AWS::AccountId',":role/YOUR_CLOUDFORMATION_DEPLOYMENT_ROLE" ]]
+                  - !Join ["",["arn:aws:iam::", !Ref 'AWS::AccountId',":role/","BCO-SR-SecretCertificate-Operation"]]
+                  - !Join [ "", [ "arn:aws:iam::", !Ref 'AWS::AccountId',":role/YOUR_CLOUDFORMATION_DEPLOYMENT_ROLE" ] ]
+                  - !Join [ "", [ "arn:aws:iam::", !Ref 'AWS::AccountId',":role/YOUR_DATABASE_OPERATIONS_ROLE" ] ]
+                  - !Join [ "", [ "arn:aws:iam::", !Ref 'AWS::AccountId',":root" ] ]
+                  - !Ref pDBARole
+                  - !Ref pCoesRole
+                  - !If [ envDev, !Ref pFullStackRole, !Ref "AWS::NoValue" ]
+
+
+  rSecretSchemaCNXLZRDS:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name:
+        Fn::Sub: '${pImportBase}-secretrds-CNXIGLZP'
+      Description:
+        Fn::Sub: 'Secreto del usuario de conexion CNX de la BD YOUR_PROJECT_NAME para LZ.'
+      KmsKeyId:
+        Fn::Join: ["", ["{{resolve:ssm:", Ref: pImportBase, "-kms:1}}"]]
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "CNXIGLZP"}'
+        GenerateStringKey: "password"
+        PasswordLength: 15
+        ExcludeCharacters: '"@/\&'
+
+  rSecretSchemaCNXDatical:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name:
+        Fn::Sub: '${pImportBase}-secretrds-CNXDATI'
+      Description:
+        Fn::Sub: 'Secreto del usuario de conexion CNX de la BD YOUR_PROJECT_NAME para Datical.'
+      KmsKeyId:
+        Fn::Join: ["", ["{{resolve:ssm:", Ref: pImportBase, "-kms:1}}"]]
+      GenerateSecretString:
+        SecretStringTemplate:
+          !Join ["", ["{\"username\":\"", !Ref pUserDatical, "\"}" ]]
+        GenerateStringKey: "password"
+        PasswordLength: 15
+        ExcludeCharacters: '"@/\&'
+
+  rSecretSchemaCNXDaticalResourcePolicy:
+    Type: AWS::SecretsManager::ResourcePolicy
+    Properties:
+      SecretId: !Ref rSecretSchemaCNXDatical
+      ResourcePolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: "Deny"
+            Principal:
+              AWS: "*"
+            Action:
+              - "secretsmanager:GetSecretValue"
+            Resource: "*"
+            Condition:
+              StringNotEquals:
+                aws:PrincipalArn:
+                  - !Join [ "", [ "arn:aws:iam::", !Ref 'AWS::AccountId',":role/YOUR_CLOUDFORMATION_DEPLOYMENT_ROLE" ]]
+                  - !Join ["",["arn:aws:iam::", !Ref 'AWS::AccountId',":role/","BCO-SR-SecretCertificate-Operation"]]
+                  - !Join [ "", [ "arn:aws:iam::", !Ref 'AWS::AccountId',":role/YOUR_CLOUDFORMATION_DEPLOYMENT_ROLE" ] ]
+                  - !Join [ "", [ "arn:aws:iam::", !Ref 'AWS::AccountId',":role/YOUR_DATABASE_OPERATIONS_ROLE" ] ]
+                  - !Join [ "", [ "arn:aws:iam::", !Ref 'AWS::AccountId',":root" ] ]
+                  - !Ref pDBARole
+                  - !Ref pCoesRole
+
+
+  rSecretSchemaCNXDynatrace:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name:
+        Fn::Sub: '${pImportBase}-secretrds-CNXDYNA'
+      Description:
+        Fn::Sub: 'Secreto del usuario de conexion CNX de la BD YOUR_PROJECT_NAME para application monitoring service.'
+      KmsKeyId:
+        Fn::Join: [ "", [ "{{resolve:ssm:", Ref: pImportBase, "-kms:1}}" ] ]
+      GenerateSecretString:
+        SecretStringTemplate:
+          !Join [ "", [ "{\"username\":\"", !Ref pUserDynatrace, "\"}" ] ]
+        GenerateStringKey: "password"
+        PasswordLength: 15
+        ExcludeCharacters: '"@/\&'
+
+  rSecretSchemaCNXDynatraceResourcePolicy:
+    Type: AWS::SecretsManager::ResourcePolicy
+    Properties:
+      SecretId: !Ref rSecretSchemaCNXDynatrace
+      ResourcePolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: "Deny"
+            Principal:
+              AWS: "*"
+            Action:
+              - "secretsmanager:GetSecretValue"
+            Resource: "*"
+            Condition:
+              StringNotEquals:
+                aws:PrincipalArn:
+                  - !Join [ "", [ "arn:aws:iam::", !Ref 'AWS::AccountId',":role/YOUR_CLOUDFORMATION_DEPLOYMENT_ROLE" ]]
+                  - !Join ["",["arn:aws:iam::", !Ref 'AWS::AccountId',":role/","BCO-SR-SecretCertificate-Operation"]]
+                  - !Join [ "", [ "arn:aws:iam::", !Ref 'AWS::AccountId',":role/YOUR_CLOUDFORMATION_DEPLOYMENT_ROLE" ] ]
+                  - !Join [ "", [ "arn:aws:iam::", !Ref 'AWS::AccountId',":role/YOUR_DATABASE_OPERATIONS_ROLE" ] ]
+                  - !Join [ "", [ "arn:aws:iam::", !Ref 'AWS::AccountId',":root" ] ]
+                  - !Ref pDBARole
+                  - !Ref pCoesRole
+
+      # rSecretRDSMonitoreoEuk:
+      #   Condition: cAditionalEc2
+      #   Type: AWS::SecretsManager::Secret
+      #   Properties:
+      #     Name: !Join ["-", [!Ref 'AWS::StackName' , "secretrds-cnxmonaw", "euk"]]
+      #     Description:
+      #       Fn::Sub: 'Secreto del usuario monitoreo de la base de datos del proyecto EUREKA'
+      #     GenerateSecretString:
+      #       SecretStringTemplate:
+      #         !Join ["", ["{\"username\":\"", !Ref pMonUsername, "\",",
+      #         "\"port\":\"", !Ref pMonPort, "\",",
+      #         "\"host\":\"", !Ref pMonHost, "\",",
+      #         "\"dbname\":\"", !Ref pMonBD, "\",",
+      #         "\"enviroment\":\"", !Ref pEnvironment, "\",",
+      #         "\"engine\":\"", !Ref pMonEngine,  "\"}"]]
+      #       GenerateStringKey: "password"
+      #       PasswordLength: 15
+      #       ExcludeCharacters: ^$+/"@/\&?<>%*|()~[]`-{}.:,;=!\ñ'
+
+      # rSecretRDSMonitoreoOyd:
+      #   Condition: cAditionalEc2
+      #   Type: AWS::SecretsManager::Secret
+      #   Properties:
+      #     Name: !Join ["-", [!Ref 'AWS::StackName' , "secretrds-cnxmonaw", "oyd"]]
+      #     Description:
+      #       Fn::Sub: 'Secreto del usuario monitoreo de la base de datos del proyecto OYD'
+      #     GenerateSecretString:
+      #       SecretStringTemplate:
+      #         !Join ["", ["{\"username\":\"", !Ref pMonUsername, "\",",
+      #         "\"port\":\"", !Ref pMonPort, "\",",
+      #         "\"host\":\"", !Ref pMonHost, "\",",
+      #         "\"dbname\":\"", !Ref pMonBD1, "\",",
+      #         "\"enviroment\":\"", !Ref pEnvironment, "\",",
+      #         "\"engine\":\"", !Ref pMonEngine,  "\"}"]]
+      #       GenerateStringKey: "password"
+      #       PasswordLength: 15
+      #       ExcludeCharacters: ^$+/"@/\&?<>%*|()~[]`-{}.:,;=!\ñ'
+
+      # rSecretRDSMonitoreoOW:
+      #   Condition: cAditionalEc2
+      #   Type: AWS::SecretsManager::Secret
+      #   Properties:
+      #     Name: !Join ["-", [!Ref 'AWS::StackName' , "secretrds-cnxmonaw", "ow"]]
+      #     Description:
+      #       Fn::Sub: 'Secreto del usuario monitoreo de la base de datos del proyecto Ordenes WEB'
+      #     GenerateSecretString:
+      #       SecretStringTemplate:
+      #         !Join ["", ["{\"username\":\"", !Ref pMonUsername, "\",",
+      #         "\"port\":\"", !Ref pMonPort, "\",",
+      #         "\"host\":\"", !Ref pMonHost, "\",",
+      #         "\"dbname\":\"", !Ref pMonBD2, "\",",
+      #         "\"enviroment\":\"", !Ref pEnvironment, "\",",
+      #         "\"engine\":\"", !Ref pMonEngine,  "\"}"]]
+      #       GenerateStringKey: "password"
+      #       PasswordLength: 15
+      #       ExcludeCharacters: ^$+/"@/\&?<>%*|()~[]`-{}.:,;=!\ñ'
+
+      #rSecretCertParameterStore:
+      #Type: AWS::SSM::Parameter
+      #Properties:
+      #Description: The load ARN Secret Manager for Certifictes on parameter store
+      #Type: String
+      #Name: !Join ["-", [!Ref 'AWS::StackName', "cert"]]
+      #Value: !Ref rSecretCert
+
+  rSecretSchemaRDSParameterStore:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: The load ARN Secret Manager for user connection of database
+      Type: String
+      Name: !Join ["-", [!Ref 'AWS::StackName', "cnxbd"]]
+      Value: !Ref rSecretSchemaRDS
+
+    #Outputs:
+    #SecretCertARN:
+    #Description: Secret name with the password of the certificate's private key
+    #Value: !Ref rSecretCert

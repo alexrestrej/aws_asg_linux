@@ -1,0 +1,109 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: AWS CloudFormation para crear SFTP Transfer para el proyecto de corefactoring
+Parameters:
+  project:
+    Description: Nombre del proyecto.
+    Type: String
+  environment:
+    Description: Nombre del proyecto.
+    Type: String
+  BucketUploadDocARN:
+    Description: ARN S3 del proyecto.
+    Type: String
+  BucketUploadDocname:
+    Description: Nombre S3 del proyecto.
+    Type: String
+  sshkey:
+    Description: Public key ssh
+    Type: String
+  sshkeyOUSterling:
+    Description: Public key ssh para usuario sterling
+    Type: String
+  ServerId:
+    Description: ServerId sftp
+    Type: String
+  applicationcode:
+    Description: Codigo AW de la aplicacion.
+    Type: String
+  KmsArn:
+    Description: ARN de la llave KMS
+    Type: String  
+
+Resources:
+
+  # SFTP TransferFamily
+  sftpRole:
+    Type: AWS::IAM::Role
+    Properties:
+      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/YOUR_GOVERNANCE_BOUNDARY_POLICY
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service: transfer.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      RoleName: !Join ["-", [!Ref project, !Ref environment, "S3-SFTP-Rol"]]
+      Policies:
+        - PolicyName:
+            !Join ["-", [!Ref project, !Ref environment, "S3-SFTP-Policy"]]
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - s3:ListBucket
+                  - s3:GetBucketLocation                
+                Resource: !Ref BucketUploadDocARN
+              - Effect: "Allow"
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:DeleteObjectVersion
+                  - s3:DeleteObject
+                  - s3:GetObjectVersion
+                  - s3:GetObjectACL
+                  - s3:PutObjectACL
+                Resource: #"arn:aws:s3:::YOUR_APP_CODE-YOUR_PROJECT_NAME-dev-recursos/*"
+                  Fn::Join: [ '', [ !Ref BucketUploadDocARN, '/*' ] ]
+                  #- !Join ["", [, "/*"]] #!Sub '${BucketUploadDocARN}/*'
+              - Effect: 'Allow'
+                Action:
+                  - kms:Encrypt
+                  - kms:Decrypt
+                  - kms:ReEncrypt*
+                  - kms:GenerateDataKey*
+                  - kms:DescribeKey
+                  - kms:Update*
+                  - kms:List*
+                  - kms:Get*                  
+                Resource:
+                  - !Ref KmsArn
+              - Effect: 'Allow'
+                Action:
+                  - kms:CreateGrant
+                  - kms:ListGrants
+                  - kms:RevokeGrant
+                Resource:
+                  - !Ref KmsArn
+                Condition:
+                  Bool:
+                    kms:GrantIsForAWSResource: true    
+  
+  TransferUser:
+    Type: AWS::Transfer::User
+    DependsOn: sftpRole
+    Properties:
+      HomeDirectory: !Join ["", ["/", Ref: BucketUploadDocname]]
+      Role: !GetAtt sftpRole.Arn
+      ServerId: !Ref ServerId
+      SshPublicKeys:
+        - !Ref sshkey
+        - !Ref sshkeyOUSterling
+      UserName: !Join [ "-", [!Ref applicationcode, !Ref project,"transfer-user",!Ref environment] ]
+
+Outputs:
+  rolArn:
+    Description: ARN del rol creado para el consumo del bucket
+    Value: !GetAtt sftpRole.Arn      

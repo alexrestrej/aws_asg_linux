@@ -1,0 +1,50 @@
+[
+    {
+        "ParameterKey": "pEnvironment",
+        "ParameterValue": "#{env}#"
+    },
+    {
+        "ParameterKey": "pASGSubnets",
+        "ParameterValue": "#{subnets-app-string}#"
+    },
+    {
+        "ParameterKey": "pSchemaALB",
+        "ParameterValue": "#{alb-schema}#"
+    },
+    {
+        "ParameterKey": "pSslPolicy",
+        "ParameterValue": "#{alb-ssl-policy}#"
+    },    
+    {
+        "ParameterKey": "pS3LogsALB",
+        "ParameterValue": "#{s3-bucket-logs-alb}#"
+    },
+    {
+        "ParameterKey": "pCerPkiArn",
+        "ParameterValue": "#{cer-pki-arn}#"
+    },
+    {
+        "ParameterKey": "pCerCommonName01",
+        "ParameterValue": "#{cer-common-name-alb-int}#"
+    },
+    {
+        "ParameterKey": "pCerSans01",
+        "ParameterValue": "#{cer-sans-alb-int}#"
+    },
+    {
+        "ParameterKey": "pPSSGAALB",
+        "ParameterValue": "#{sg-alb}#"
+    },
+    {
+      "ParameterKey": "pHealthCheckInterval",
+      "ParameterValue": "#{asg-target-group-health-interval}#"
+    },
+    {
+      "ParameterKey": "pHealthCheckCount",
+      "ParameterValue": "#{asg-target-group-health-count}#"
+    },
+    {
+      "ParameterKey": "pUnhealthCheckCount",
+      "ParameterValue": "#{asg-target-group-unhealth-count}#"
+    }
+]

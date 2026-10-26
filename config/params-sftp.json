@@ -1,0 +1,38 @@
+[
+    
+    {
+        "ParameterKey": "project",
+        "ParameterValue": "#{project-name}#"
+    },
+    {
+        "ParameterKey": "environment",
+        "ParameterValue": "#{env}#"
+    },
+    {
+        "ParameterKey": "BucketUploadDocARN",
+        "ParameterValue": "#{bucket-upload-doc-arn}#"
+    },{
+        "ParameterKey": "sshkey",
+        "ParameterValue": "#{ssh-key}#"
+    }, 
+    {
+        "ParameterKey": "sshkeyOUSterling",
+        "ParameterValue": "#{ssh-key-sterling}#"
+    },
+    {
+        "ParameterKey": "applicationcode",
+        "ParameterValue": "#{application-code}#"
+    },
+    {
+        "ParameterKey": "ServerId",
+        "ParameterValue": "#{server-sftp-id}#"
+    },
+    {
+        "ParameterKey": "BucketUploadDocname",
+        "ParameterValue": "#{cf-bucketDsS3-name}#"
+    },
+    {
+        "ParameterKey": "KmsArn",
+        "ParameterValue": "#{arn-kms-project}#"
+    }
+]

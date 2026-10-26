@@ -1,0 +1,165 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: DMS vpc role
+
+Parameters:
+  pAppBucketName:
+    Description: ARN Bucket for Application
+    Type: String
+
+  pPSKMSARN:
+    Description: KMS ARN value in Parameter Store
+    Type: String
+  
+  pCustomKMS:
+    Description: Custom KMS for shared services
+    Type: String
+
+  pSecretManagerCertARN:
+    Description: The ARN of the secret that contains the password of certificate's private key 
+    Type: String
+
+  pImportBase:
+    Description: Name base for the resources of this stack
+    Type: String
+
+  # pSecretManagerADPasswARN:
+  #   Description: The ARN of the secret that contains the password of AD domain
+  #   Type: String
+
+Conditions:
+
+  enableCustomKMS:
+    !Not [!Equals [!Ref pCustomKMS, ""] ]
+
+  CreateSecretPolicy:
+    !Not [!Equals [!Ref pSecretManagerCertARN, ""] ]
+
+Resources:
+  # rEC2Role:
+  #   Type: AWS::IAM::Role
+  #   Properties:
+  #     PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/YOUR_GOVERNANCE_BOUNDARY_POLICY
+  #     RoleName:  !Join ["-", ["BCO-FullStackD",!Ref 'AWS::StackName', "EC2role"]]  
+  #     ManagedPolicyArns:
+  #       - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+  #       - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+  #       - arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess
+  #       - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM 
+  #     AssumeRolePolicyDocument:
+  #       Version: '2012-10-17'
+  #       Statement:
+  #       - Effect: Allow
+  #         Principal:
+  #           Service:
+  #           - ec2.amazonaws.com 
+  #         Action:
+  #         - sts:AssumeRole
+  #     Path: /    
+  #     Policies:
+  #       - 
+  #         PolicyName: !Join ["", [!Ref 'AWS::StackName' , "-Server-policy"]]         
+  #         PolicyDocument:
+  #           Version: 2012-10-17
+  #           Statement:
+  #             -
+  #               Sid: KmsPermissions                  
+  #               Effect: Allow
+  #               Action:
+  #                 - 'kms:Decrypt'
+  #                 - 'kms:Encrypt'
+  #                 - 'kms:GenerateDataKey'
+  #               Resource:
+  #               - !Join ["", ["{{resolve:ssm:", !Ref pPSKMSARN, "}}"]]              
+  #             - 
+  #               Sid: EC2tags
+  #               Effect: Allow
+  #               Action:
+  #                 - 'ec2:Describe*'
+  #                 - 'ec2:CreateTags'
+  #               Resource: "*"
+  #                 # - !Join [ ":", ["arn:aws:ec2", !Ref AWS::Region, !Ref AWS::AccountId, "instance/*"]]
+  #                 # - !Join [ ":", ["arn:aws:ec2", !Ref AWS::Region, !Ref AWS::AccountId, "volume/*"]]
+  #             -
+  #               Sid: createSSMAssociationEC2
+  #               Effect: Allow
+  #               Action:
+  #                 - 'ssm:CreateAssociation'
+  #               Resource:
+  #               - Fn::Sub: arn:aws:ec2:*:*:*
+  #             -
+  #               Sid: createSSMAssociation
+  #               Effect: Allow
+  #               Action:
+  #                 - 'ssm:CreateAssociationDocument'
+  #               Resource:
+  #               - Fn::Sub: arn:aws:ssm:*:*:*
+  
+  # rS3Policy:
+  #   Type: 'AWS::IAM::Policy'
+  #   Properties:
+  #     PolicyDocument:
+  #       Version: 2012-10-17
+  #       Statement:
+  #         - Sid: VisualEditor0
+  #           Effect: Allow
+  #           Action:
+  #             - 's3:Get*'
+  #             - 's3:Put*'
+  #             - 's3:List*'
+  #           Resource: 
+  #             - Fn::Sub: arn:aws:s3:::${pImportBase}*/*
+  #             - Fn::Sub: arn:aws:s3:::${pImportBase}*
+  #     PolicyName: !Join ["", [!Ref 'AWS::StackName' , "-s3-policy"]]
+  #     Roles:
+  #       - !Ref rEC2Role
+
+  # rCutomKMSPolicy:
+  #   Type: 'AWS::IAM::Policy'
+  #   Condition: enableCustomKMS
+  #   Properties:
+  #     PolicyDocument:
+  #       Version: 2012-10-17
+  #       Statement:
+  #         - Sid: VisualEditor0
+  #           Effect: Allow
+  #           Action:
+  #             - kms:GenerateDataKey
+  #             - kms:Decrypt
+  #           Resource: 
+  #             - !Ref pCustomKMS
+  #     PolicyName: !Join ["", [!Ref 'AWS::StackName' , "-kms-shared-policy"]]
+  #     Roles:
+  #       - !Ref rEC2Role
+
+  rSecretPolicy:
+    Type: 'AWS::IAM::Policy'
+    Condition: CreateSecretPolicy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: VisualEditor0
+            Effect: Allow
+            Action: 'secretsmanager:*'
+            Resource:
+            - !Join ["", ["{{resolve:ssm:", !Ref pSecretManagerCertARN, "}}"]] 
+              # - !Ref pSecretManagerCertARN
+              # # - !Ref pSecretManagerADPasswARN
+      PolicyName: !Join ["", [!Ref 'AWS::StackName' , "-secret-policy"]]
+      Roles:
+        - !Ref rEC2Role
+
+  # rEC2InstanceProfile:
+  #   Type: AWS::IAM::InstanceProfile
+  #   Properties:
+  #     Path: /
+  #     Roles:
+  #       - Ref: rEC2Role
+
+  # rRolARNParameterStore:
+  #   Type: AWS::SSM::Parameter
+  #   Properties:
+  #     Description: "Parameter store for EC2 Rol ARN"
+  #     Type: String
+  #     Name: !Join ["-", [!Ref 'AWS::StackName', "ec2-arn-rol"]]
+  #     Value: !GetAtt rEC2Role.Arn

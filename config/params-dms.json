@@ -1,0 +1,86 @@
+[
+
+    {
+        "ParameterKey": "pEnvironment",
+        "ParameterValue": "#{env}#"
+    },
+    {
+        "ParameterKey": "pImportBase",
+        "ParameterValue": "#{application-code}#-#{project-name}#-#{env}#"
+    },
+ 
+    {
+        "ParameterKey": "pPrivateSubnet1",
+        "ParameterValue": "#{dms-instance-subnet1}#"
+    },
+    {
+        "ParameterKey": "pPrivateSubnet2",
+        "ParameterValue": "#{dms-instance-subnet2}#"
+    },   
+    {
+        "ParameterKey": "pDmsInstanceClass",
+        "ParameterValue": "#{dms-instance-class}#"
+    },
+    {
+        "ParameterKey": "pDmsReplInstanceStorage",
+        "ParameterValue": "#{dms-instance-storage}#"
+    },
+    {
+        "ParameterKey": "pDmsSourceEngine",
+        "ParameterValue": "#{dms-source-engine}#"
+    },
+    {
+        "ParameterKey": "pDmsSourceDBName",
+        "ParameterValue": "#{dms-source-dbname}#"
+    },
+    {
+        "ParameterKey": "pDmsSourceUsername",
+        "ParameterValue": "#{dms-source-user}#"
+    },    
+    {
+        "ParameterKey": "pDmsSourcePassword",
+        "ParameterValue": "#{dms-source-password}#"
+    },    
+    {
+        "ParameterKey": "pDmsSourceDBServer",
+        "ParameterValue": "#{dms-source-dbserver}#"
+    },    
+    {
+        "ParameterKey": "pDmsSourceDBPort",
+        "ParameterValue": "#{dms-source-dbport}#"
+    }, 
+	{
+        "ParameterKey": "pDmsTargetEngine",
+        "ParameterValue": "#{dms-target-engine}#"
+    },
+    {
+        "ParameterKey": "pDmsTargetDBName",
+        "ParameterValue": "#{dms-target-dbname}#"
+    },
+    {
+        "ParameterKey": "pDmsTargetUsername",
+        "ParameterValue": "#{dms-target-user}#"
+    },    
+    {
+        "ParameterKey": "pDmsTargetPassword",
+        "ParameterValue": "#{dms-target-password}#"
+    },    
+    {
+        "ParameterKey": "pDmsTargetDBServer",
+        "ParameterValue": "#{dms-target-dbserver}#"
+    },  
+    {
+        "ParameterKey": "pDmsSourceExtraConnAttributes",
+        "ParameterValue": "#{dms-source-extra-conn-attributes}#"
+    },  
+    {
+        "ParameterKey": "pDmsTargetDBPort",
+        "ParameterValue": "#{dms-target-dbport}#"
+    }
+    ,  
+    {
+        "ParameterKey": "pDmsSGCidrIp",
+        "ParameterValue": "#{dms-sg-cidrip}#"
+    }
+    
+]

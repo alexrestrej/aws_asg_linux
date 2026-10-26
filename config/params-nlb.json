@@ -1,0 +1,38 @@
+[
+    {
+        "ParameterKey": "pASGSubnets",
+        "ParameterValue": "#{subnets-app-string}#"
+    },
+    {
+        "ParameterKey": "pLoadBalancerTimeOut",
+        "ParameterValue": "#{nlb-timeout}#"
+    },
+    {
+        "ParameterKey": "pSchemaNLB",
+        "ParameterValue": "#{nlb-schema}#"
+    },
+    {
+        "ParameterKey": "pARNCertificado",
+        "ParameterValue": "#{nlb-arn-certificado}#"
+    },
+    {
+        "ParameterKey": "pSslPolicy",
+        "ParameterValue": "#{nlb-ssl-policy}#"
+    },    
+    {
+        "ParameterKey": "pS3LogsALB",
+        "ParameterValue": "#{s3-bucket-logs-nlb}#"
+    },
+    {
+        "ParameterKey": "pCerPkiArn",
+        "ParameterValue": "#{cer-pki-arn}#"
+    },
+    {
+        "ParameterKey": "pCerCommonName01",
+        "ParameterValue": "#{cer-common-name-nlb}#"
+    },
+    {
+        "ParameterKey": "pCerSans01",
+        "ParameterValue": "#{cer-sans-nlb}#"
+    }
+]

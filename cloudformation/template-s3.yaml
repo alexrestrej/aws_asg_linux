@@ -1,0 +1,247 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: This template deploy all required S3 buckets for this app, files, certificates and load balancer logs
+
+Parameters:
+  pAppBucketName:
+    Description: S3 bucket name which contain app files and public certificates.
+    Type: String
+
+  pALBLogsBucketName:
+    Type: String
+    Description: S3 bucket name which contain ALB logs.
+
+  pPSKMS:
+    Description: KMS ARN value in Parameter Store
+    Type: String 
+
+  pImportBase:
+    Description: Cadena de proyecto para Parameter storage
+    Type: String
+
+  pEnvironment:
+    Description: Ambiente donde se despliega.
+    Type: String
+    
+  pAccessControl:
+    Description: Specify the access control list.
+    Type: String
+
+  pS3SFTPRol:
+    Description: Specify the access control list.
+    Type: String
+
+  pS3DayCycle:
+    Description: Specify the day cycle for S3 bucket lifecycle.
+    Type: Number
+
+  pS3NotCurrentDays:
+    Description: Specify the number of days for non-current versions to expire.
+    Type: Number
+
+  pS3DayCycleLogs:
+    Description: Specify the day cycle for S3 bucket lifecycle.
+    Type: Number
+
+  pS3NotCurrentDaysLogs:
+    Description: Specify the number of days for non-current versions to expire.
+    Type: Number
+
+Conditions:
+
+  s3Exist:
+    !Not [!Equals [!Ref pAccessControl,"false"]]
+
+  cSoloSiEs:
+    Fn::Or:
+      - Fn::Equals: [Ref: pEnvironment, dev]
+      - Fn::Equals: [Ref: pEnvironment, qa]
+      - Fn::Equals: [Ref: pEnvironment, pdn]
+
+Resources:
+  rS3Recursos:
+    Type: AWS::S3::Bucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+      AccessControl: Private
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !Join ["", ["arn:aws:kms:",!Ref 'AWS::Region',":",!Ref 'AWS::AccountId',":key/{{resolve:ssm:", !Ref pPSKMS, "}}"]]
+            BucketKeyEnabled: true
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      BucketName:
+        !Ref pAppBucketName
+      LifecycleConfiguration:
+        Rules:
+          - Id: rule-entire-bucket
+            Status: Enabled
+            ExpirationInDays: !Ref pS3DayCycle
+            NoncurrentVersionExpiration:
+              NoncurrentDays: !Ref pS3NotCurrentDays
+      Tags:
+        - Key: "organization:clasificacion-confidencialidad"
+          Value: "confidencial"
+        - Key: "organization:clasificacion-integridad"
+          Value: "impacto critico"
+        - Key: "organization:clasificacion-disponibilidad"
+          Value: "impacto critico"
+        - Key: "organization:dominio-informacion"
+          Value: "productos-financiera-contable"
+        - Key: "organization:datos-personales"
+          Value: "no"
+        - Key: "organization:cumplimiento"
+          Value: "sox-bia"
+
+  rS3RecursosBucketPolicy:
+    Condition: cSoloSiEs
+    Type: AWS::S3::BucketPolicy
+    DependsOn: rS3Recursos
+    Properties:
+      Bucket: !Ref rS3Recursos
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: 
+              - !Ref pS3SFTPRol
+            Action:
+              - s3:PutObject
+              - s3:GetObject
+              - s3:GetObjectVersion
+              - s3:GetObjectACL
+              - s3:PutObjectACL
+              - s3:DeleteObject
+            Resource: !Join ["", [ !GetAtt  rS3Recursos.Arn, /*]]
+          - Effect: Allow
+            Principal:
+              AWS:
+                - YOUR_AWS_ACCOUNT_ID
+                - YOUR_AWS_ACCOUNT_ID
+                - !Ref pS3SFTPRol
+            Action:
+              - s3:ListBucket
+              - s3:GetBucketLocation
+            Resource: !Join ["", [ !GetAtt  rS3Recursos.Arn]]
+          - Effect: Deny
+            Principal: '*'
+            Action:  s3:*
+            Resource: 
+              - !Join ["", [ !GetAtt  rS3Recursos.Arn]]
+              - !Join ["", [ !GetAtt  rS3Recursos.Arn, /*]]
+            Condition:
+              Bool:
+                aws:SecureTransport:  'false'
+
+  rS3LogsALB:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: Private
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration: 
+          Status: Enabled
+      BucketName:
+        !Ref pALBLogsBucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      LifecycleConfiguration:
+        Rules:
+          - Id: rule-entire-bucket
+            Status: Enabled
+            ExpirationInDays: !Ref pS3DayCycleLogs
+            NoncurrentVersionExpiration:
+              NoncurrentDays: !Ref pS3NotCurrentDaysLogs
+
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [ !Ref 'AWS::StackName', "logs-alb"]]
+        - Key: "organization:clasificacion-confidencialidad"
+          Value: "confidencial"
+        - Key: "organization:clasificacion-integridad"
+          Value: "impacto critico"
+        - Key: "organization:clasificacion-disponibilidad"
+          Value: "impacto critico"
+        - Key: "organization:dominio-informacion"
+          Value: "no"
+        - Key: "organization:datos-personales"
+          Value: "no"
+        - Key: "organization:cumplimiento"
+          Value: "bia"
+
+  rS3BucketPolicyLogsALB:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket:
+        Ref: rS3LogsALB
+      PolicyDocument:
+        Statement:
+          - 
+            Sid: "AWSLogALBWrite"
+            Effect: "Allow"
+            Principal: 
+              AWS: "arn:aws:iam::127311923021:root"
+            Action: "s3:PutObject"
+            Resource:
+              Fn::Join:
+                - ""
+                -
+                  - !GetAtt rS3LogsALB.Arn
+                  - "/ALBLogs"
+                  - "/AWSLogs/"
+                  - !Ref AWS::AccountId
+                  - "/*"
+          - 
+            Sid: "AWSlogDeliveryWrite"
+            Effect: "Allow"
+            Principal: 
+              Service: "delivery.logs.amazonaws.com"
+            Action: "s3:PutObject"
+            Resource:
+              Fn::Join:
+                - ""
+                -
+                  - !GetAtt rS3LogsALB.Arn
+                  - "/ALBLogs"
+                  - "/AWSLogs/"
+                  - !Ref AWS::AccountId
+                  - "/*"
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: 
+                  bucket-owner-full-control              
+          - 
+            Sid: "AWSLogDeliveryAclCheck"
+            Effect: "Allow"
+            Principal:
+              Service: "delivery.logs.amazonaws.com"
+            Action: "s3:GetBucketAcl"
+            Resource: !GetAtt rS3LogsALB.Arn
+          - 
+            Sid: "EnableSSL"
+            Effect: "Deny"
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !Join ["", ["arn:aws:s3:::", !Ref pALBLogsBucketName]]
+              - !Join ["", ["arn:aws:s3:::", !Ref pALBLogsBucketName, "/*"]]
+            Condition:
+              Bool:
+                aws:SecureTransport: 
+                  "false"

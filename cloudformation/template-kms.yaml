@@ -1,0 +1,273 @@
+# Stack removido. Se uso para la migracion DMS y ya no se requiere
+---
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  This Cloud Formation template create a KMS Key
+
+Parameters:
+  pAWSKeyManagementServicePowerUser:
+    Description: Key use for the rds.
+    Type: String
+    Default: arn:aws:iam::aws:policy/AWSKeyManagementServicePowerUser
+
+  pImportBase:
+    Description: The base name of the imported objetcs
+    Type: String
+
+  pKmsDev:
+    Description: KMS Key for Dev environment
+    Type: String
+
+  pKmsQa:
+    Description: KMS Key for Qa environment
+    Type: String
+
+
+  pEnvironment:
+    Description: Ambiente donde se despliega.
+    Type: String
+
+  pS3SFTPRol:
+    Description: Specify the access control list.
+    Type: String
+
+  pKmsKeyIdOld:
+    Description: Orphan KMS Key ID in Qa and Dev
+    Type: String
+
+Conditions:
+  envPdn:
+    Fn::Equals: [Ref: pEnvironment, "pdn"]
+
+  envQa:
+    Fn::Equals: [Ref: pEnvironment, "qa"]
+
+  envDev:
+    Fn::Equals: [Ref: pEnvironment, "dev"]
+
+  isQaOrDev:
+    Fn::Or:
+      - !Condition envQa
+      - !Condition envDev
+
+  createNewKms:
+    Fn::Not:
+      - !Condition isQaOrDev
+
+Resources:
+
+  rDMSRole:
+    Condition: envPdn
+    Type: 'AWS::IAM::Role'
+    Properties:
+      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/YOUR_GOVERNANCE_BOUNDARY_POLICY
+      RoleName: 'dms-vpc-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - dms.amazonaws.com 
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonDMSVPCManagementRole
+        - arn:aws:iam::aws:policy/service-role/AmazonDMSCloudWatchLogsRole
+
+  rDMSRole2:
+    Condition: envPdn
+    Type: 'AWS::IAM::Role'
+    Properties:
+      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/YOUR_GOVERNANCE_BOUNDARY_POLICY
+      RoleName: 'dms-cloudwatch-logs-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - dms.amazonaws.com 
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonDMSCloudWatchLogsRole
+
+
+  rKmsKey:
+    Condition: envPdn
+    Type: AWS::KMS::Key
+    Properties:
+      Description: !Ref 'AWS::StackName'
+      EnableKeyRotation: true
+      PendingWindowInDays: '30'
+      KeyPolicy:
+        Version: 2012-10-17
+        Id: key-policy
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Join ["", ["arn:aws:iam::", !Ref 'AWS::AccountId',":root"]]
+            Action:
+              - "kms:*"
+            Resource: '*'
+          - Sid: Allow key admin
+            Effect: Allow
+            Principal:
+              AWS:
+              - Fn::Sub: 'arn:aws:iam::${AWS::AccountId}:role/YOUR_CLOUDFORMATION_DEPLOYMENT_ROLE'
+              # No se puede consultar el secreto de user YOUR_DATABASE_ADMIN_USER por lo cual se incorpora la cuenta
+              - Fn::If: 
+                - envPdn
+                - "arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_YOUR_ROLE_NAME"
+                - !Ref "AWS::NoValue"
+            Action:
+              - "kms:Create*"
+              - "kms:Describe*"
+              - "kms:Enable*"
+              - "kms:List*"
+              - "kms:Put*"
+              - "kms:Update*"
+              - "kms:Revoke*"
+              - "kms:Disable*"
+              - "kms:Get*"
+              - "kms:Delete*"
+              - "kms:ScheduleKeyDeletion"
+              - "kms:CancelKeyDeletion"
+            Resource: '*'
+            Condition:
+              StringEquals:
+                kms:ViaService: !Join ["", ["secretsmanager.", !Ref "AWS::Region", ".amazonaws.com"]]
+          - Sid: Allow use of the key
+            Effect: Allow
+            Principal:
+              AWS:
+              - !Ref pS3SFTPRol
+              - Fn::Sub: 'arn:aws:iam::${AWS::AccountId}:role/YOUR_CLOUDFORMATION_DEPLOYMENT_ROLE'
+              # No se puede consultar el secreto de user YOUR_DATABASE_ADMIN_USER por lo cual se incorpora la cuenta
+              - Fn::If: 
+                - envPdn
+                - "arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_YOUR_ROLE_NAME"
+                - !Ref "AWS::NoValue"
+            Action:
+            - kms:Encrypt
+            - kms:Decrypt
+            - kms:ReEncrypt*
+            - kms:GenerateDataKey*
+            - kms:DescribeKey
+            - kms:Update*
+            - kms:GetPublicKey
+            Resource: "*" 
+            Condition:
+              StringEquals:
+                kms:ViaService:
+                  - !Sub ec2.${AWS::Region}.amazonaws.com
+                  - !Sub rds.${AWS::Region}.amazonaws.com
+                  - !Sub s3.${AWS::Region}.amazonaws.com
+                  - !Sub sns.${AWS::Region}.amazonaws.com
+          - Sid: Allow service-linked role use of the CMK 
+            Effect: Allow
+            Principal:
+              AWS: 
+              - Fn::Sub: 'arn:aws:iam::${AWS::AccountId}:role/YOUR_CLOUDFORMATION_DEPLOYMENT_ROLE'
+              - !Join ["", ["arn:aws:iam::", !Ref 'AWS::AccountId',":role","/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"]]
+              # No se puede consultar el secreto de user YOUR_DATABASE_ADMIN_USER por lo cual se incorpora la cuenta
+              - Fn::If: 
+                - envPdn
+                - "arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_YOUR_ROLE_NAME"
+                - !Ref "AWS::NoValue"
+              - Fn::If: 
+                - envQa
+                - "arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_YOUR_ROLE_NAME"
+                - !Ref "AWS::NoValue"
+              - Fn::If: 
+                - envDev
+                - "arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_YOUR_ROLE_NAME"
+                - !Ref "AWS::NoValue"
+            Action:
+              - "kms:Encrypt"
+              - "kms:Decrypt"
+              - "kms:ReEncrypt*"
+              - "kms:GenerateDataKey*"
+              - "kms:DescribeKey"
+            Resource: '*'
+            Condition:
+              StringEquals:
+                kms:ViaService:
+                  - !Sub ec2.${AWS::Region}.amazonaws.com
+                  - !Sub rds.${AWS::Region}.amazonaws.com
+                  - !Sub s3.${AWS::Region}.amazonaws.com
+                  - !Sub sns.${AWS::Region}.amazonaws.com
+          - Sid: Allow attachment of persistent resources for AutoScalin 
+            Effect: Allow
+            Principal:
+              AWS: !Join ["", ["arn:aws:iam::", !Ref 'AWS::AccountId',":role","/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"]]
+            Action:
+              - "kms:CreateGrant"
+            Resource: '*'
+            Condition: 
+              Bool:
+                kms:GrantIsForAWSResource: true
+              StringEquals:
+                kms:ViaService:
+                  - !Sub ec2.${AWS::Region}.amazonaws.com
+                  - !Sub rds.${AWS::Region}.amazonaws.com
+                  - !Sub s3.${AWS::Region}.amazonaws.com
+                  - !Sub sns.${AWS::Region}.amazonaws.com  
+          - Sid: DenyEffectSSL
+            Effect: Deny
+            Principal: "*"
+            Action: kms:*
+            Resource: '*'
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+
+  rKmsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Join ["", ["alias/", !Ref 'AWS::StackName']]
+      TargetKeyId: !If
+        - createNewKms
+        - Ref: rKmsKey
+        - !If
+          - envDev
+          - Ref: pKmsDev
+          - Ref: pKmsQa
+
+  rKmsKeyParameterStore:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: kmsKey
+      Type: String
+      Name: !Ref 'AWS::StackName'
+      Value:
+        Fn::If:
+          - createNewKms
+          - !Ref rKmsKey
+          - Fn::If:
+              - envDev
+              - Ref: pKmsDev
+              - Ref: pKmsQa
+
+  rKmsARNParameterStore:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: kmsKey
+      Type: String
+      Name: !Join ["-", [!Ref 'AWS::StackName', "arn"]]
+      Value:
+        Fn::If:
+          - isQaOrDev
+          - !Ref pKmsKeyIdOld
+          - !GetAtt rKmsKey.Arn
+
+Outputs:
+  rKmsKey:
+    Description: kmsKey
+    Value:
+      Fn::If:
+        - createNewKms
+        - !Ref rKmsKey
+        - !Ref pKmsKeyIdOld

@@ -1,0 +1,195 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  This Cloud Formation template deploy an ELB Load Balancer, with Target Group
+
+Parameters:
+
+  pASGSubnets:
+    Description: Private subnets for application load balancer
+    Type: String
+
+  pSchemaALB:
+    Description: Tipo de NLB, Internal o internet-facing.
+    Type: String
+
+  pSslPolicy:
+    Description: Indique la politica de seguridad a usar. (ELBSecurityPolicy-TLS-1-2-Ext-2018-06)
+    Type: String
+
+  pS3LogsALB:
+    Type: String
+    Description: The S3 bucket name that contains ALB logs.
+
+  pEnvironment:
+    Description: Ambiente
+    Type: String
+
+  ## Parametros PKI - Certificados Digitales
+  pCerPkiArn:
+    Description: The ARN of the SNS topic used to request a PKI Certificate.
+    Type: String
+
+  ## Parametros Certificados
+  pCerCommonName01:
+    Description: Common Name for Certificate 01.
+    Type: String
+
+  pCerSans01:
+    Description: SANS for Certificate 01.
+    Type: String
+
+  pPSSGAALB:
+    Description: ALB SG value in the Parameter Store.
+    Type: String
+
+  ## Parametros Target Group
+  pHealthCheckInterval:
+    Description: Intervalo de tiempo entre verificaciones de health.
+    Type: String
+    Default: 60
+
+  pHealthCheckCount:
+    Description: Cantidad de checks antes de marcar como healthy.
+    Type: String
+    Default: 5
+
+  pUnhealthCheckCount:
+    Description: Cantidad de checks antes de marcar como unhealthy.
+    Type: String
+    Default: 2
+
+Resources:
+
+## Certificado Digital 01 - InternalDigitalCertificate
+  InternalCertificateELB01:
+    Type: Custom::InternalDigitalCertificate
+    Properties:
+      ServiceToken: !Ref pCerPkiArn
+      common_name: !Ref pCerCommonName01
+      subject_alternative_names: !Ref pCerSans01
+      aws_service: 'ELB'
+      key_type: RSA2048
+  
+  rApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Ref 'AWS::StackName'
+      Scheme: !Ref pSchemaALB
+      Type: application
+      LoadBalancerAttributes:
+        - Key: access_logs.s3.enabled
+          Value: "true"
+        - Key: access_logs.s3.bucket
+          Value: !Ref pS3LogsALB
+        - Key: access_logs.s3.prefix
+          Value: "ALBLogs"
+        - Key: deletion_protection.enabled
+          Value: "true"
+      SecurityGroups:
+        - !Join ["", ["{{resolve:ssm:", !Ref pPSSGAALB, "}}"]]
+      Subnets:
+        Fn::Split:
+          - ','
+          - Ref: pASGSubnets
+  
+  rALBTargetGroupAppHTTPS:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: !Ref pHealthCheckInterval
+      HealthyThresholdCount: !Ref pHealthCheckCount
+      UnhealthyThresholdCount: !Ref pUnhealthCheckCount
+      HealthCheckPath: /detect/
+      TargetType: instance
+      Port: 8443
+      Protocol: HTTPS
+      VpcId:
+        Fn::ImportValue: DefaultVPCId
+      Tags:
+      - Key: Name
+        Value:  !Join ["-", [!Ref 'AWS::StackName', "https-tg"]]
+
+  rALBListenerAppHTTPS:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref rApplicationLoadBalancer
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+      - CertificateArn: !GetAtt InternalCertificateELB01.AcmCerArn
+      SslPolicy: !Ref pSslPolicy
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref rALBTargetGroupAppHTTPS
+
+  # rALBListenerRule1:
+  #   Type: AWS::ElasticLoadBalancingV2::ListenerRule
+  #   Properties:
+  #     Actions:
+  #     - Type: redirect
+  #       RedirectConfig:
+  #         Protocol: "HTTPS"
+  #         Port: "443"
+  #         Host: "#{host}"
+  #         Path: "/detect/"
+  #         Query: "#{query}"
+  #         StatusCode: "HTTP_301"
+  #     ListenerArn: !Ref rALBListenerAppHTTPS
+  #     Conditions:
+  #     - Field: path-pattern
+  #       Values:
+  #         - "/"       
+  #     Priority: 2
+
+  # rALBListenerRule2:
+  #   Type: AWS::ElasticLoadBalancingV2::ListenerRule
+  #   Properties:
+  #     Actions:
+  #     - Type: fixed-response
+  #       FixedResponseConfig:
+  #         ContentType: "text/plain"
+  #         MessageBody: "Metodo restringido"
+  #         StatusCode: "503"
+  #     ListenerArn: !Ref rALBListenerAppHTTPS
+  #     Conditions:
+  #     - Field: path-pattern
+  #       Values:
+  #         - "/detect/services/WSClientService"
+  #     - Field: query-string  
+  #       QueryStringConfig:
+  #         Values:
+  #           - Key: "operation"
+  #             Value: "retrieveClientInformation"       
+  #     Priority: 1    
+
+  rALBTargetGroupAppArnParameterStoreHTTPS:
+    Type: AWS::SSM::Parameter
+    Properties:
+        Description: The ARN of ALB target group
+        Type: String
+        Name: !Join ["-", [!Ref 'AWS::StackName', "https-tg"]]
+        Value:
+            Ref: rALBTargetGroupAppHTTPS
+
+  rALBFullNameParameterStore:
+    Type: AWS::SSM::Parameter
+    Properties:
+        Description: The full name of the load balancer
+        Type: String
+        Name: !Join ["-", [!Ref 'AWS::StackName', "full-name"]]
+        Value:
+            Fn::GetAtt: [rApplicationLoadBalancer, LoadBalancerFullName]
+
+
+Outputs:
+  rALBTargetGroupAppArnHTTPS:
+    Description: The ARN of ALB target group
+    Value:
+      Ref: rALBTargetGroupAppHTTPS
+  InternalCertificateELB01AcmArn01:
+    Value: !GetAtt InternalCertificateELB01.AcmCerArn
+  InternalCertificateELB01Cer01:
+    Value: !GetAtt InternalCertificateELB01.Cer
+  rNLBFullName:
+      Description: The full name of the load balancer.
+      Value:
+        Fn::GetAtt: [rApplicationLoadBalancer, LoadBalancerFullName]

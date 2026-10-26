@@ -1,0 +1,184 @@
+trigger: none
+
+parameters:
+  - name: resource
+    displayName: CloudFormation resource
+    type: string
+    default: asg
+    values:
+      - s3
+      - sm
+      - sg
+      - alb
+      - asg
+      - kms
+      - rds
+      - rdsmig
+      - cw
+      - waf
+      - albE
+      - dms
+      - rdsrep
+      - ec2
+      - nlb
+      - sftp
+
+variables:
+  appCode: YOUR_APP_CODE
+  projectName: YOUR_PROJECT_NAME
+
+stages:
+  - stage: deploy_dev
+    displayName: Deploy dev
+    jobs:
+      - job: deploy
+        displayName: Deploy CloudFormation resource
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - bash: |
+              set -euo pipefail
+              template_file="cloudformation/template-${RESOURCE}.yaml"
+              parameter_file="config/params-${RESOURCE}.json"
+              stack_name="${APP_CODE}-${PROJECT_NAME}-${DEPLOY_ENV}-${RESOURCE}"
+
+              mapfile -t parameter_overrides < <(python3 - "$parameter_file" "$DEPLOY_ENV" "$APP_CODE" "$PROJECT_NAME" <<'PY'
+              import json
+              import sys
+
+              parameter_file, environment, app_code, project_name = sys.argv[1:]
+              with open(parameter_file, encoding="utf-8") as file:
+                  parameters = json.load(file)
+
+              for parameter in parameters:
+                  key = parameter["ParameterKey"]
+                  value = parameter["ParameterValue"]
+                  value = value.replace("#{env}#", environment)
+                  value = value.replace("#{application-code}#", app_code)
+                  value = value.replace("#{project-name}#", project_name)
+                  if key in ("pEnvironment", "pEnviroment", "Ambiente"):
+                      value = environment
+                  print("ParameterKey={},ParameterValue={}".format(key, value))
+              PY
+              )
+
+              aws cloudformation deploy \
+                --template-file "$template_file" \
+                --stack-name "$stack_name" \
+                --parameter-overrides "${parameter_overrides[@]}" \
+                --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+                --no-fail-on-empty-changeset
+            displayName: Deploy dev resource
+            env:
+              RESOURCE: ${{ parameters.resource }}
+              DEPLOY_ENV: dev
+              APP_CODE: $(appCode)
+              PROJECT_NAME: $(projectName)
+              AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID_DEV)
+              AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY_DEV)
+              AWS_SESSION_TOKEN: $(AWS_SESSION_TOKEN_DEV)
+              AWS_DEFAULT_REGION: $(AWS_REGION_DEV)
+
+  - stage: deploy_qa
+    displayName: Deploy qa
+    dependsOn: deploy_dev
+    jobs:
+      - job: deploy
+        displayName: Deploy CloudFormation resource
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - bash: |
+              set -euo pipefail
+              template_file="cloudformation/template-${RESOURCE}.yaml"
+              parameter_file="config/params-${RESOURCE}.json"
+              stack_name="${APP_CODE}-${PROJECT_NAME}-${DEPLOY_ENV}-${RESOURCE}"
+
+              mapfile -t parameter_overrides < <(python3 - "$parameter_file" "$DEPLOY_ENV" "$APP_CODE" "$PROJECT_NAME" <<'PY'
+              import json
+              import sys
+
+              parameter_file, environment, app_code, project_name = sys.argv[1:]
+              with open(parameter_file, encoding="utf-8") as file:
+                  parameters = json.load(file)
+
+              for parameter in parameters:
+                  key = parameter["ParameterKey"]
+                  value = parameter["ParameterValue"]
+                  value = value.replace("#{env}#", environment)
+                  value = value.replace("#{application-code}#", app_code)
+                  value = value.replace("#{project-name}#", project_name)
+                  if key in ("pEnvironment", "pEnviroment", "Ambiente"):
+                      value = environment
+                  print("ParameterKey={},ParameterValue={}".format(key, value))
+              PY
+              )
+
+              aws cloudformation deploy \
+                --template-file "$template_file" \
+                --stack-name "$stack_name" \
+                --parameter-overrides "${parameter_overrides[@]}" \
+                --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+                --no-fail-on-empty-changeset
+            displayName: Deploy qa resource
+            env:
+              RESOURCE: ${{ parameters.resource }}
+              DEPLOY_ENV: qa
+              APP_CODE: $(appCode)
+              PROJECT_NAME: $(projectName)
+              AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID_QA)
+              AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY_QA)
+              AWS_SESSION_TOKEN: $(AWS_SESSION_TOKEN_QA)
+              AWS_DEFAULT_REGION: $(AWS_REGION_QA)
+
+  - stage: deploy_prod
+    displayName: Deploy production
+    dependsOn: deploy_qa
+    jobs:
+      - job: deploy
+        displayName: Deploy CloudFormation resource
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - bash: |
+              set -euo pipefail
+              template_file="cloudformation/template-${RESOURCE}.yaml"
+              parameter_file="config/params-${RESOURCE}.json"
+              stack_name="${APP_CODE}-${PROJECT_NAME}-${DEPLOY_ENV}-${RESOURCE}"
+
+              mapfile -t parameter_overrides < <(python3 - "$parameter_file" "$DEPLOY_ENV" "$APP_CODE" "$PROJECT_NAME" <<'PY'
+              import json
+              import sys
+
+              parameter_file, environment, app_code, project_name = sys.argv[1:]
+              with open(parameter_file, encoding="utf-8") as file:
+                  parameters = json.load(file)
+
+              for parameter in parameters:
+                  key = parameter["ParameterKey"]
+                  value = parameter["ParameterValue"]
+                  value = value.replace("#{env}#", environment)
+                  value = value.replace("#{application-code}#", app_code)
+                  value = value.replace("#{project-name}#", project_name)
+                  if key in ("pEnvironment", "pEnviroment", "Ambiente"):
+                      value = environment
+                  print("ParameterKey={},ParameterValue={}".format(key, value))
+              PY
+              )
+
+              aws cloudformation deploy \
+                --template-file "$template_file" \
+                --stack-name "$stack_name" \
+                --parameter-overrides "${parameter_overrides[@]}" \
+                --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+                --no-fail-on-empty-changeset
+            displayName: Deploy production resource
+            env:
+              RESOURCE: ${{ parameters.resource }}
+              DEPLOY_ENV: pdn
+              APP_CODE: $(appCode)
+              PROJECT_NAME: $(projectName)
+              AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID_PROD)
+              AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY_PROD)
+              AWS_SESSION_TOKEN: $(AWS_SESSION_TOKEN_PROD)
+              AWS_DEFAULT_REGION: $(AWS_REGION_PROD)

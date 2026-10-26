@@ -1,0 +1,103 @@
+[
+  {
+    "ParameterKey": "pEnvironment",
+    "ParameterValue": "#{env}#"
+  },
+  {
+    "ParameterKey": "psgDMS",
+    "ParameterValue": "#{dms-sg}#"
+  },
+  {
+    "ParameterKey": "pDBName",
+    "ParameterValue": "#{rds-db-name}#"
+  },
+  {
+    "ParameterKey": "pAllocatedStorage",
+    "ParameterValue": "#{rds-allocated-storage}#"
+  },
+  {
+    "ParameterKey": "pStorageType",
+    "ParameterValue": "#{rds-storage-type}#"
+  },
+  {
+    "ParameterKey": "pLicenseModel",
+    "ParameterValue": "#{rds-license-model}#"
+  },
+  {
+    "ParameterKey": "pSnapshotIdentifier",
+    "ParameterValue": "#{rds-snapshot-identifier}#"
+  },
+  {
+    "ParameterKey": "pImportBase",
+    "ParameterValue": "#{application-code}#-#{project-name}#-#{env}#"
+  },
+  {
+    "ParameterKey": "pMaxAllocatedStorage",
+    "ParameterValue": "#{rds-max-allocated-storage}#"
+  },
+  {
+    "ParameterKey": "pUserschema",
+    "ParameterValue": "#{rds-user-schema}#"
+  },
+
+  {
+    "ParameterKey": "pRdsBucketName",
+    "ParameterValue": "#{s3-bucket-rds}#"
+  },
+  {
+    "ParameterKey": "pPSSGEC2",
+    "ParameterValue": "#{rds-sg-app}#"
+  },
+  {
+    "ParameterKey": "pSgT",
+    "ParameterValue": "#{rds-sg-transversal-app}#"
+  },
+  {
+    "ParameterKey": "pPSSGASG",
+    "ParameterValue": "#{sg-app}#"
+  },
+  {
+    "ParameterKey": "pEngineVersion",
+    "ParameterValue": "#{rds-engine-version}#"
+  },
+  {
+    "ParameterKey": "pIopsAprovicionados",
+    "ParameterValue": "#{rds-Iops-Aprovicionados}#"
+  },
+  {
+    "ParameterKey": "pLogGroupName",
+    "ParameterValue": "#{log-group-name}#"
+  },
+  {
+    "ParameterKey": "pFilters",
+    "ParameterValue": "#{rds-filters}#"
+  },
+  {
+    "ParameterKey": "pinstanceScheduler",
+    "ParameterValue": "#{instance-scheduler}#"
+  },
+  {
+    "ParameterKey": "pDBARole",
+    "ParameterValue": "#{Dba-Role}#"
+  },
+  {
+    "ParameterKey": "pCoesRole",
+    "ParameterValue": "#{Coes-Role}#"
+  },
+  {
+    "ParameterKey": "pSSLcertificate",
+    "ParameterValue": "#{rds-ssl-certificate}#"
+  },
+  {
+    "ParameterKey": "pFullStackRole",
+    "ParameterValue": "#{FullStack-Role}#"
+  },
+  {
+    "ParameterKey": "pEC2InstanceRoleName",
+    "ParameterValue": "#{asg-instance-role-name}#"
+  },
+  {
+    "ParameterKey": "pSGTrasnversal",
+    "ParameterValue": "#{rds-transversal-sg}#"
+  }
+]

@@ -1,0 +1,141 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: "This template deploys a Ec2"
+Parameters:
+  pInstanceType:
+    Description: Tipo de instancia
+    Type: String
+    Default: m5.2xlarge
+
+  pInstanceSubnet:
+    Description: Subred para la instancia
+    Type: AWS::EC2::Subnet::Id
+
+  pInstanceAMI:
+    Description: AMI a emplear, por default RHEL 7.8
+    Type: String
+    Default: ami-0a94a08ee3e831106
+
+  pInstanceProfile:
+    Description: "EC2 Isntance profile"
+    Type: String
+
+  pPSKMS:
+    Description: KMS value in Parameter Store
+    Type: String
+
+  pDisableApiTermination:
+    Description: AWS EC2 Deletion Protection
+    Type: String
+
+  pVolumeSDA1:
+    Description: Volume size SO
+    Type: String
+
+  pVolumeSDA2:
+    Description: Volume size Sda2
+    Type: String
+
+  pHostNameApp:
+    Description: 'Nombre de host App #1 (max 12 caracteres)'
+    Type: String
+    MaxLength: '12'
+
+  pPSSGEC2:
+    Description: "EC2 Security Group"
+    Type: String
+
+  pPSSGCA:
+    Description: "privileged access service Security Group"
+    Type: String
+
+  pAz4Deployment:
+    Description: "Availity Zone for Volume"
+    Type: String
+
+
+
+Resources:
+  rEC2lVol1:
+    Type: 'AWS::EC2::Volume'
+    Properties:
+      AvailabilityZone:
+        Ref: pAz4Deployment
+      Encrypted: 'true'
+      KmsKeyId: !Join ["", ["arn:aws:kms:",!Ref 'AWS::Region',":",!Ref 'AWS::AccountId',":key/{{resolve:ssm:", !Ref pPSKMS, "}}"]]
+      Size:
+        Ref: pVolumeSDA2
+      VolumeType: gp3
+      Tags:
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "organization:bkdiario"
+          Value: "ebs"
+        - Key: "organization:bkmensual"
+          Value: "ebs"
+        - Key: "organization:clasificacion-confidencialidad"
+          Value: "restringida"
+        - Key: "organization:clasificacion-integridad"
+          Value: "impacto criico"
+        - Key: "organization:clasificacion-disponibilidad"
+          Value: "impacto critico"
+        - Key: "organization:dominio-informacion"
+          Value: "no"
+        - Key: "organization:datos-personales"
+          Value: "no"
+        - Key: "organization:cumplimiento"
+          Value: "bia"
+  rMntPointEC2lVol1:
+    Type: 'AWS::EC2::VolumeAttachment'
+    Properties:
+      InstanceId:
+        Ref: rEC2lInstance
+      VolumeId:
+        Ref: rEC2lVol1
+      Device: /dev/sda2
+
+  rEC2lInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref pInstanceType
+      ImageId: !Ref pInstanceAMI
+      SubnetId: !Ref pInstanceSubnet
+      DisableApiTermination: !Ref pDisableApiTermination
+      InstanceInitiatedShutdownBehavior: 'stop'
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: !Ref pVolumeSDA1
+            DeleteOnTermination: 'true'
+            Encrypted: 'true'
+            KmsKeyId: !Join ["", ["arn:aws:kms:",!Ref 'AWS::Region',":",!Ref 'AWS::AccountId',":key/{{resolve:ssm:", !Ref pPSKMS, "}}"]]
+      SecurityGroupIds: 
+        - !Join ["", ["{{resolve:ssm:", !Ref pPSSGEC2, "}}"]]
+        - !Join ["", ["{{resolve:ssm:", !Ref pPSSGCA, "}}"]]
+      IamInstanceProfile: !Ref pInstanceProfile
+      Tags:
+        - Key: "Name"
+          Value: !Ref 'AWS::StackName'
+        - Key: "organization:clasificacion-confidencialidad"
+          Value: "restringida"
+        - Key: "organization:clasificacion-integridad"
+          Value: "impacto critico"
+        - Key: "organization:clasificacion-disponibilidad"
+          Value: "impacto critico"
+        - Key: "organization:dominio-informacion"
+          Value: "no"
+        - Key: "organization:datos-personales"
+          Value: "no"
+        - Key: "organization:cumplimiento"
+          Value: "bia"
+
+Outputs:
+  oAppServerEC2:
+    Description: ID EC2 Servidor App
+    Value:
+      Ref: rEC2lInstance
+  oAppServerIP:
+    Description: Direccion IP Servidor App
+    Value:
+      'Fn::GetAtt':
+        - rEC2lInstance
+        - PrivateIp

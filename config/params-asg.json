@@ -1,0 +1,238 @@
+[
+    {
+        "ParameterKey": "pASGSubnets",
+        "ParameterValue": "#{subnets-app-string}#"
+    },
+    {
+        "ParameterKey": "pASGminSize",
+        "ParameterValue": "#{asg-min-ec2}#"
+    },
+    {
+        "ParameterKey": "pASGmaxSize",
+        "ParameterValue": "#{asg-max-ec2}#"
+    },
+    {
+        "ParameterKey": "pASGdesiredSize",
+        "ParameterValue": "#{asg-desired-ec2}#"
+    },
+    {
+        "ParameterKey": "pScaleUpWaitTime",
+        "ParameterValue": "#{asg-scale-up-wait-time}#"
+    },
+    {
+        "ParameterKey": "pInstanceType",
+        "ParameterValue": "#{ec2-instance-type}#"
+    },
+    {
+        "ParameterKey": "pAMI",
+        "ParameterValue": "#{ec2-image-id-ami}#"
+    },
+    {
+        "ParameterKey": "pAppBucketName",
+        "ParameterValue": "#{s3-bucket}#"
+    },
+    {
+        "ParameterKey": "pCertificadosBucketName",
+        "ParameterValue": "#{s3-bucket-cert}#"
+    },
+    {
+        "ParameterKey": "pEnvironment",
+        "ParameterValue": "#{env}#"
+    },
+    {
+        "ParameterKey": "pApplicationCode",
+        "ParameterValue": "#{application-code}#"
+    },
+    {
+        "ParameterKey": "pProjectName",
+        "ParameterValue": "#{project-name}#"
+    },
+    {
+        "ParameterKey": "pPSKMS",
+        "ParameterValue": "#{ps-kms}#"
+    },
+    {
+        "ParameterKey": "pPSKMSARN",
+        "ParameterValue": "#{ps-kms-arn}#"
+    },
+    {
+        "ParameterKey": "pPSSGASG",
+        "ParameterValue": "#{sg-app}#"
+    },
+    {
+        "ParameterKey": "pPSSGCA",
+        "ParameterValue": "#{sg-privileged access service}#"
+    },
+    {
+        "ParameterKey": "pImportBase",
+        "ParameterValue": "#{application-code}#-#{project-name}#-#{env}#"
+    },
+    {
+        "ParameterKey": "pSiteDNSName",
+        "ParameterValue": "#{app-dns-name}#"
+    },
+    {
+        "ParameterKey": "pServernameApp",
+        "ParameterValue": "#{app-server-name}#"
+    },
+    {
+        "ParameterKey": "pPSHTTPSTG",
+        "ParameterValue": "#{ps-alb-https-tg}#"
+    },
+    {
+        "ParameterKey": "pPSHTTPSTGExt",
+        "ParameterValue": "#{ps-alb-https-tg-ext}#"
+    },
+    {
+        "ParameterKey": "pVolumeSDA1",
+        "ParameterValue": "#{ec2-volume-size-so}#"
+    },
+    {
+        "ParameterKey": "pCustomKMS",
+        "ParameterValue": "#{arn-kms-shared}#"
+    },
+    {
+        "ParameterKey": "pEC2InstanceRoleName",
+        "ParameterValue": "#{asg-instance-role-name}#"
+    },    
+    {
+        "ParameterKey": "pS3LogsALB",
+        "ParameterValue": "#{s3-bucket-logs-alb}#"
+    },
+    {
+        "ParameterKey": "pDeploymentgroupname",
+        "ParameterValue": "#{azagent-dg-name}#"
+    },
+    {
+        "ParameterKey": "pUser",
+        "ParameterValue": "#{azagent-dg-user}#"
+    },
+    {
+        "ParameterKey": "pDeploymentgroupPath",
+        "ParameterValue": "#{azagent-dg-path}#"
+    },
+    {
+        "ParameterKey": "pDomain",
+        "ParameterValue": "#{ec2-domain}#"
+    },
+    {
+        "ParameterKey": "pDBDns",
+        "ParameterValue": "#{dms-target-dbserver}#"
+    },
+    {
+        "ParameterKey": "pDBPort",
+        "ParameterValue": "#{dms-target-dbport}#"
+    },
+    {
+        "ParameterKey": "pDBName",
+        "ParameterValue": "#{rds-db-name}#"
+    },
+    {
+        "ParameterKey": "pDBUser",
+        "ParameterValue": "#{rds-db-user}#"
+    },
+    {
+        "ParameterKey": "pDBPass",
+        "ParameterValue": "#{rds-db-password}#"
+    },
+    {
+        "ParameterKey": "pBTPass",
+        "ParameterValue": "#{ec2-bt-password}#"
+    },
+    {
+        "ParameterKey": "pSecretManagerDBPassARN",
+        "ParameterValue": "#{arn-secretmanager-db}#"
+    },
+    {
+        "ParameterKey": "pKSname",
+        "ParameterValue": "#{keystore-name}#"
+    },
+    {
+        "ParameterKey": "pCerPkiArn",
+        "ParameterValue": "#{cer-pki-arn}#"
+    },
+    {
+        "ParameterKey": "pCerCommonName01",
+        "ParameterValue": "#{cer-common-name-asg}#"
+    },
+    {
+        "ParameterKey": "pCerSans01",
+        "ParameterValue": "#{cer-sans-asg}#"
+    },
+    {
+        "ParameterKey": "pEnableDynatrace",
+        "ParameterValue": "#{enable-application monitoring service}#"
+    },
+    {
+        "ParameterKey": "pEnrollURL",
+        "ParameterValue": "#{app-enroll-url}#"
+    },
+    {
+        "ParameterKey": "pJavaVersion",
+        "ParameterValue": "#{ec2-java-version}#"
+    },
+    {
+        "ParameterKey": "pCertificateInt1",
+        "ParameterValue": "#{acm-certificate-interno1}#"
+    },
+    {
+        "ParameterKey": "pCertificateInt2",
+        "ParameterValue": "#{acm-certificate-interno2}#"
+    },
+    {
+        "ParameterKey": "pCertificateExt",
+        "ParameterValue": "#{acm-certificate-externo}#"
+    },
+    {
+        "ParameterKey": "pUrlPush",
+        "ParameterValue": "#{ec2-url-push}#"
+    },
+    {
+        "ParameterKey": "pSecretManagerSMPassARN",
+        "ParameterValue": "#{arn-secretmanager-sm}#"
+    },
+    {
+        "ParameterKey": "pClusterMode",
+        "ParameterValue": "#{ec2-cluster-mode}#"
+    },
+    {
+        "ParameterKey": "pDelayTimeEC2",
+        "ParameterValue": "#{ec2-deploy-time}#"
+    },
+    {
+        "ParameterKey": "plogSize",
+        "ParameterValue": "#{ec2-log-size}#"
+    },
+    {
+        "ParameterKey": "pExecuteRestart",
+        "ParameterValue": "#{ec2-execute-restart}#"
+    },
+    {
+        "ParameterKey": "pNtpServer",
+        "ParameterValue": "#{ntp-server}#"
+    },
+    {
+        "ParameterKey": "pMemory",
+        "ParameterValue": "#{ec2-memory-size}#"
+    },
+    {
+      "ParameterKey": "pIgniteRefeInitial",
+      "ParameterValue": "#{ignite-initial}#"
+    },
+    {
+      "ParameterKey": "pIgniteRefeMaxSite",
+      "ParameterValue": "#{ignite-max}#"
+    },
+    {
+      "ParameterKey": "pIgniteTransInitial",
+      "ParameterValue": "#{ignite-trans-init}#"
+    },
+    {
+      "ParameterKey": "pIgniteTransMaxSite",
+      "ParameterValue": "#{ignite-trans-max}#"
+    },
+    {
+      "ParameterKey": "pPythonVersion",
+      "ParameterValue": "#{lambda-python-version}#"
+    }
+]

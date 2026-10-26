@@ -1,0 +1,42 @@
+[
+    {
+        "ParameterKey": "pPSKMS",
+        "ParameterValue": "#{ps-kms}#"
+    },
+    {
+        "ParameterKey": "pEnvironment",
+        "ParameterValue": "#{env}#"
+    },
+    {
+        "ParameterKey": "pImportBase",
+        "ParameterValue": "#{application-code}#-#{project-name}#-#{env}#"
+    },
+    {
+        "ParameterKey": "pUserschema",
+        "ParameterValue": "#{rds-user-YOUR_PROJECT_NAME}#"
+    },
+    {
+        "ParameterKey": "pUserDatical",
+        "ParameterValue": "#{rds-user-datical}#"
+    },
+    {
+        "ParameterKey": "pUserDynatrace",
+        "ParameterValue": "#{rds-user-application monitoring service}#"
+    },
+    {
+        "ParameterKey": "pDBARole",
+        "ParameterValue": "#{Dba-Role}#"
+    },
+    {
+        "ParameterKey": "pCoesRole",
+        "ParameterValue": "#{Coes-Role}#"
+    },
+    {
+        "ParameterKey": "pFullStackRole",
+        "ParameterValue": "#{FullStack-Role}#"
+    },
+    {
+        "ParameterKey": "pEC2InstanceRoleName",
+        "ParameterValue": "#{asg-instance-role-name}#"
+    }
+]

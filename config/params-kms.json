@@ -1,0 +1,30 @@
+[
+    {
+        "ParameterKey": "pAWSKeyManagementServicePowerUser",
+        "ParameterValue": "#{kms-arn-power-user-policy}#"
+    },
+    {
+        "ParameterKey": "pImportBase",
+        "ParameterValue": "#{application-code}#-#{project-name}#-#{env}#"
+    },
+    {
+        "ParameterKey": "pEnvironment",
+        "ParameterValue": "#{env}#"
+    },
+    {
+        "ParameterKey": "pS3SFTPRol",
+        "ParameterValue": "#{sftp-rol-bucket}#"
+    },
+    {
+        "ParameterKey": "pKmsKeyIdOld",
+        "ParameterValue": "#{kms-key-old}#"
+    },
+    {
+        "ParameterKey": "pKmsDev",
+        "ParameterValue": "#{kms-key-dev}#"
+    },
+    {
+        "ParameterKey": "pKmsQa",
+        "ParameterValue": "#{kms-key-qa}#"
+    }
+]

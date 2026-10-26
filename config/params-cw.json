@@ -1,0 +1,59 @@
+[
+    {
+      "ParameterKey": "pSNSAppTopicEmail",
+      "ParameterValue": "#{cw-sns-App-topic-email}#"
+    },
+    {
+      "ParameterKey": "pSNSDBATopicEmail",
+      "ParameterValue": "#{cw-sns-dba-topic-email}#"
+    },
+    
+    {
+      "ParameterKey": "pSNSDBATopicEmailGioti",
+      "ParameterValue": "#{cw-sns-dba-topic-email-Gioti}#"
+    },
+    {
+      "ParameterKey": "pSNSDBATopicEmailMonitCC",
+      "ParameterValue": "#{cw-sns-dba-topic-email-MonitCC}#"
+    },
+    {
+      "ParameterKey": "pSNSDBATopicEmailMonit",
+      "ParameterValue": "#{cw-sns-dba-topic-email-Monit}#"
+    },
+    {
+      "ParameterKey": "pSNSInfraTopicEmail",
+      "ParameterValue": "#{cw-sns-Infra-topic-email}#"
+    },
+    {
+      "ParameterKey": "pbucketName1",
+      "ParameterValue": "#{s3-bucket-logs-alb}#"
+    },
+    {
+      "ParameterKey": "pbucketName2",
+      "ParameterValue": "#{s3-bucket}#"
+    },
+    {
+      "ParameterKey": "pbucketName3",
+      "ParameterValue": "#{s3-bucket-cert}#"
+    },
+    {
+      "ParameterKey": "pbucketName4",
+      "ParameterValue": "#{s3-bucket-rds}#"
+    },
+    {
+      "ParameterKey": "pAlarmAlias",
+      "ParameterValue": "#{cw-Alarm-Alias}#"
+    },
+    {
+      "ParameterKey": "pAlertWrapperTopic",
+      "ParameterValue": "#{cw-sns-Alert-Wrapper-topic-email}#"
+    },
+    {
+      "ParameterKey": "pEnvironment",
+      "ParameterValue": "#{env}#"
+    },
+    {
+    "ParameterKey": "pPSKMS",
+    "ParameterValue": "#{ps-kms}#"
+    }
+  ]

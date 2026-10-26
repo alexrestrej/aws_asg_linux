@@ -1,0 +1,45 @@
+{
+    "version": "1.0.0",
+    "title": "Simulate mz failure in EKS",
+    "description": "Simulate mz failure in EKS",
+    "tags": [
+        "Application-Code:#{app_code}#",
+        "Project-Name:#{project_name}#"
+    ],
+    "configuration": {},
+    "steady-state-hypothesis": {
+        "title": "Instances and services are available and healthy",
+        "probes": []
+    },
+    "method": [
+        {
+            "type": "action",
+            "name": "rollback cluster",
+            "background": false,
+            "provider": {
+                "type": "process",
+                "path": "python",
+                "arguments": "#{path_to_file}#/update_cluster.py #{cluster_id}# #{account_id}# #{bearer_token}# #{default_subnets}#"
+            }
+        },
+        {
+            "name": "change-subnets",
+            "type": "action",
+            "provider": {
+                "type": "python",
+                "module": "chaosaws.asg.actions",
+                "func": "change_subnets",
+                "arguments": {
+                    "subnets": ["#{default_subnets}#"],
+                    "tags": [
+                        {
+                            "Key": "#{tag_key}#",
+                            "Value": "#{tag_value}#"
+                        }
+                    ]
+                }
+            }
+        }
+        ],
+    "rollbacks": []
+}

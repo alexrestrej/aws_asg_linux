@@ -1,0 +1,6 @@
+[
+    {
+        "ParameterKey": "pEnvironment",
+        "ParameterValue": "#{env}#"
+    }
+]

@@ -1,0 +1,867 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Template para el despliegue de recursos RDS.
+
+Parameters: #Parametros que necesitan los recursos para poder ser desplegados
+  pEnvironment:
+    Description: Ambiente donde se despliega.
+    Type: String
+
+  pDBARole:
+    Description: ARN Role for DBA
+    Type: String
+
+  pCoesRole:
+    Description: ARN Role for COES
+    Type: String
+
+  pPSSGASG:
+    Description: SG ALB.
+    Type: String
+
+  pEngineVersion:
+    Description: Engine Version RDS.
+    Type: String
+
+  pRdsclassintance:
+    Description: Class RDS Instance primary
+    Type: String
+
+  pRdsBucketName:
+    Description: Buecket RDS
+    Type: String
+
+  pPSSGEC2:
+    Description: Security Group EC2 APP
+    Type: String
+
+  psgDMS:
+    Description: Security Group DMS
+    Type: String
+
+  pDataBase:
+    Description: Motor de base de datos
+    Type: String
+
+  pDBName:
+    Description: Nombre de la base de datos.
+    Type: String
+
+  pAllocatedStorage:
+    Description: Tamano del almacenamiento en GB.
+    Type: String
+
+  pStorageType:
+    Description: El tipo de almacenamiento asociado con esta instancia de base de datos
+    Type: String
+
+  pLicenseModel:
+    Description: El modelo de licencia de la instancia de base de datos.
+    Type: String
+    Default: bring-your-own-license
+
+  pSnapshotIdentifier:
+    Description: Identificador de snapshot para restauracion.
+    Type: String
+
+  pCharacterSetName:
+    Description: Character set of the RDS.
+    Type: String
+
+  pImportBase:
+    Description: The base name of the imported objetcs
+    Type: String
+
+  pMaxAllocatedStorage:
+    Description: Tamano maximo de almacenamiento en GB.
+    Type: String
+
+  pSSMDBSGTransversal:
+    Description: Sg transversal para la ejecucion de Scripts Iniciales
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: lz_DbSgTransversal
+
+  pIopsAprovicionados:
+    Description: Iops Storage io1.
+    Type: String
+
+  pinstanceScheduler:
+    Description: nombre de la instance de la base de datos scheduler
+    Type: String
+
+  pLogGroupName:
+    Description: Path to log group
+    Type: String
+    MinLength: 1
+    MaxLength: 100
+
+  pFilters:
+    Description: Filters for triggering lambda
+    Type: String
+    MinLength: 1
+    MaxLength: 200
+
+  pSSLcertificate:
+    Type: String
+    Description: Identificador del certificado SSL/TLS
+    Default: rds-ca-rsa2048-g1
+
+  pPythonVersion:
+    Type: String
+    Description: Python version for lambda.
+
+Mappings:
+  oracle:
+    dev:
+      BackupRetentionPeriod: 8
+      Engine: "oracle-ee"
+
+      MultiAZ: false
+      DeletionProtection: false
+
+      OptionGroup: "stackset-aws-addon-database-lb-YOUR_RESOURCE_ID-dbaoracleee19optiongroup-nilna9cjyb4t"
+      port: "50200"
+      PreferredMaintenanceWindow: Sun:07:30-Sun:08:30
+      PreferredBackupWindow: "05:30-06:30"
+      PerformanceInsightsRetentionPeriod: 7
+      EnablePerformanceInsights: true
+
+      EnableCloudwatchLogsExports:
+        - trace
+        - audit
+        - alert
+        - listener
+    qa:
+      BackupRetentionPeriod: 8
+      Engine: "oracle-ee"
+
+      MultiAZ: true
+      DeletionProtection: false
+      OptionGroup: "stackset-aws-addon-database-lb-YOUR_RESOURCE_ID-dbaoracleee19optiongroup-1bszczzfnb3d5"
+      port: "50200"
+      PreferredMaintenanceWindow: Sun:07:30-Sun:08:30
+      PreferredBackupWindow: "05:30-06:30"
+
+      PerformanceInsightsRetentionPeriod: 7
+      EnablePerformanceInsights: true
+      EnableCloudwatchLogsExports:
+        - trace
+        - audit
+        - alert
+        - listener
+    pdn:
+      BackupRetentionPeriod: 35
+      Engine: "oracle-ee"
+
+      MultiAZ: true
+      DeletionProtection: true
+      OptionGroup: "stackset-aws-addon-database-lb-YOUR_RESOURCE_ID-dbaoracleee19optiongroup-ifl9c7sm6cc7"
+      port: "57916"
+      PreferredMaintenanceWindow: Wed:08:00-Wed:08:30
+      PreferredBackupWindow: "06:30-07:30"
+      PerformanceInsightsRetentionPeriod: 7
+      EnablePerformanceInsights: true
+
+      EnableCloudwatchLogsExports:
+        - trace
+        - audit
+        - alert
+        - listener
+
+Conditions:
+  cEmptySnapshot:
+    Fn::Equals: [ Ref: pSnapshotIdentifier, "none" ]
+  envPdn:
+    Fn::Equals: [ Ref: pEnvironment, "pdn" ]
+  envDev:
+    Fn::Equals: [ Ref: pEnvironment, "dev" ]
+  envQa:
+    Fn::Equals: [ Ref: pEnvironment, "qa" ]
+
+  cTypeStorage:
+    Fn::And:
+      - Fn::Equals: [ Ref: pStorageType, "io1" ]
+      - !Not [ !Equals  [ Ref: pIopsAprovicionados, " " ] ]
+
+  cIngressEC2APP:
+    Fn::And:
+      - !Not [ !Equals [ Ref: pPSSGEC2, "" ] ]
+      - !Not [ !Equals [ Ref: pPSSGEC2, nosnap ] ]
+
+  csgdms:
+    Fn::And:
+      - !Not [ !Equals [ Ref: psgDMS, "" ] ]
+      - !Not [ !Equals [ Ref: psgDMS, nosnap ] ]
+
+Resources:
+  #Segurtiy Group personalizado para la RDS
+  rDBSecurityGroupsref:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupName:
+        Fn::Join: [ "", [ Ref: pImportBase, "-sg-rdsref" ] ]
+      GroupDescription: Grupo de securidad para la instancia de base de datos.
+      VpcId:
+        Fn::ImportValue: 'DefaultVPCId'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          Description: "Acceso DG"
+          FromPort:
+            Fn::FindInMap:
+              - Ref: pDataBase
+              - Ref: pEnvironment
+              - port
+          ToPort:
+            Fn::FindInMap:
+              - Ref: pDataBase
+              - Ref: pEnvironment
+              - port
+          CidrIp: '{{resolve:ssm:YOUR_DEPLOYMENT_NETWORK_PARAMETER:1}}'
+        - IpProtocol: tcp
+          Description: "Acceso VPN (Citrix)"
+          FromPort:
+            Fn::FindInMap:
+              - Ref: pDataBase
+              - Ref: pEnvironment
+              - port
+          ToPort:
+            Fn::FindInMap:
+              - Ref: pDataBase
+              - Ref: pEnvironment
+              - port
+          CidrIp: '{{resolve:ssm:YOUR_REMOTE_ACCESS_NETWORK_PARAMETER:1}}'
+        - IpProtocol: tcp
+          Description: "Segmento VPN contingencia "
+          FromPort:
+            Fn::FindInMap:
+              - Ref: pDataBase
+              - Ref: pEnvironment
+              - port
+          ToPort:
+            Fn::FindInMap:
+              - Ref: pDataBase
+              - Ref: pEnvironment
+              - port
+          CidrIp: '{{resolve:ssm:YOUR_CONTINGENCY_NETWORK_PARAMETER:1}}'
+        - IpProtocol: tcp
+          Description: "Allow access from cloud administrator network"
+          FromPort:
+            Fn::FindInMap:
+              - Ref: pDataBase
+              - Ref: pEnvironment
+              - port
+          ToPort:
+            Fn::FindInMap:
+              - Ref: pDataBase
+              - Ref: pEnvironment
+              - port
+          CidrIp: '{{resolve:ssm:YOUR_ADMIN_NETWORK_PARAMETER_A:1}}'
+        - IpProtocol: tcp
+          Description: "Allow access from on-premises administrator network"
+          FromPort:
+            Fn::FindInMap:
+              - Ref: pDataBase
+              - Ref: pEnvironment
+              - port
+          ToPort:
+            Fn::FindInMap:
+              - Ref: pDataBase
+              - Ref: pEnvironment
+              - port
+          CidrIp: 'YOUR_NETWORK_CIDR'
+        - IpProtocol: tcp
+          Description: "Allow access from contingency administrator network"
+          FromPort:
+            Fn::FindInMap:
+              - Ref: pDataBase
+              - Ref: pEnvironment
+              - port
+          ToPort:
+            Fn::FindInMap:
+              - Ref: pDataBase
+              - Ref: pEnvironment
+              - port
+          CidrIp: '{{resolve:ssm:YOUR_ADMIN_NETWORK_PARAMETER_B:1}}'
+        - IpProtocol: -1
+          FromPort:
+            Fn::FindInMap:
+              - Ref: pDataBase
+              - Ref: pEnvironment
+              - port
+          ToPort:
+            Fn::FindInMap:
+              - Ref: pDataBase
+              - Ref: pEnvironment
+              - port
+          CidrIp: YOUR_NETWORK_CIDR
+          Description: Allow access to the RDS from security scanner
+        - IpProtocol: -1
+          FromPort:
+            Fn::FindInMap:
+              - Ref: pDataBase
+              - Ref: pEnvironment
+              - port
+          ToPort:
+            Fn::FindInMap:
+              - Ref: pDataBase
+              - Ref: pEnvironment
+              - port
+          CidrIp: YOUR_NETWORK_CIDR
+          Description: Allow access to the RDS from security scanner
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Join: [ "", [ Ref: pImportBase, "-sg-rds" ] ]
+
+  rIngressSSISSecurityGroupDMSref:
+    Condition: csgdms
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      IpProtocol: tcp
+      FromPort:
+        Fn::FindInMap:
+          - Ref: pDataBase
+          - Ref: pEnvironment
+          - port
+
+      ToPort:
+        Fn::FindInMap:
+          - Ref: pDataBase
+          - Ref: pEnvironment
+          - port
+
+      SourceSecurityGroupId: !Ref psgDMS
+      Description: "Allow access to the RDS from DMS"
+      GroupId: !Ref rDBSecurityGroupsref
+
+  rIngressSecurityGroupAPPEC2ref:
+    Condition: cIngressEC2APP
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      IpProtocol: tcp
+      FromPort:
+        Fn::FindInMap:
+          - Ref: pDataBase
+          - Ref: pEnvironment
+          - port
+      ToPort:
+        Fn::FindInMap:
+          - Ref: pDataBase
+          - Ref: pEnvironment
+          - port
+      SourceSecurityGroupId: !Ref pPSSGEC2
+      Description: "Allow access APP EC2 YOUR_PROJECT_NAME"
+      GroupId: !Ref rDBSecurityGroupsref
+
+  rIAMRoleForRDSref:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/YOUR_GOVERNANCE_BOUNDARY_POLICY
+      RoleName:
+        Fn::Join: [ "-", [ Ref: 'AWS::StackName' , "role-ref" ] ]
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - rds.amazonaws.com
+                - monitoring.rds.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - s3:Get
+                  - s3:Put
+                  - s3:List
+                  - s3:AbortMultipartUpload
+                #                  - 's3:*'
+                Resource:
+                  - Fn::Sub: arn:aws:s3:::${pImportBase}-s3-rds
+                  - Fn::Sub: arn:aws:s3:::${pRdsBucketName}
+                Effect: Allow
+          PolicyName:
+            Fn::Join: [ "-", [ Ref: 'AWS::StackName' , "iam-policy-ref" ] ]
+        - PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - 'kms:Decrypt'
+                  - 'kms:DescribeKey'
+                  - 'kms:ReEncrypt'
+                  - 'kms:Encrypt'
+                  - 'kms:GenerateDataKey'
+                #                  - 'kms:*'
+                Resource:
+                  - Fn::Join: [ "",[ "arn:aws:kms:", Ref: 'AWS::Region' ,":", Ref: 'AWS::AccountId',":key/", Fn::Join: [ "", [ "{{resolve:ssm:", Ref: pImportBase, "-kms:1}}" ] ] ] ]
+                Effect: Allow
+          PolicyName:
+            Fn::Join: [ "-", [ Ref: 'AWS::StackName' , "kms-policy-ref" ] ]
+
+  rS3BucketPolicyRDSref:
+    Type: AWS::S3::BucketPolicy
+    DependsOn: rIAMRoleForRDSref
+    Properties:
+      Bucket:
+        Ref: pRdsBucketName
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS:
+                # - Fn::GetAtt: rIAMRoleForRDSref.Arn
+                - Fn::If:
+                    - envPdn
+                    - "arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_YOUR_ROLE_NAME"
+                    - !Ref "AWS::NoValue"
+                - Fn::If:
+                    - envQa
+                    - "arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_YOUR_ROLE_NAME"
+                    - !Ref "AWS::NoValue"
+                - Fn::If:
+                    - envDev
+                    - "arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_YOUR_ROLE_NAME"
+                    - !Ref "AWS::NoValue"
+            Action:
+              - s3:PutObject
+              - s3:GetObject
+              - s3:GetObjectVersion
+              - s3:GetObjectACL
+              - s3:PutObjectACL
+              - s3:DeleteObject
+            Resource:
+              Fn::Join: [ '', [ 'arn:aws:s3:::', !Ref 'pRdsBucketName', /* ] ]
+            Condition:
+              Bool:
+                aws:SecureTransport: 'true'
+          # - Effect: Allow
+          #   Principal:
+          #     AWS:
+          #       Fn::GetAtt: rIAMRoleForRDSref.Arn
+          #   Action:
+          #     - s3:ListBucket
+          #     - s3:GetBucketLocation
+          #   Resource:
+          #     Fn::Join: ['', ['arn:aws:s3:::', !Ref 'pRdsBucketName']]
+          - Effect: Deny
+            Principal: "*"
+            Action:
+              - s3:*
+            Resource:
+              - Fn::Join: [ '', [ 'arn:aws:s3:::', !Ref 'pRdsBucketName' ] ]
+              - Fn::Join: [ '', [ 'arn:aws:s3:::', !Ref 'pRdsBucketName', /* ] ]
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+
+  rIAMManagedPolicyforS3BackupRestoreref:
+    #DependsOn:
+    #- rS3RDS
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      ManagedPolicyName: !Join [ "", [ !Ref 'AWS::StackName' , "_iam_managed_policy" ] ]
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - 's3:ListBucket'
+              - 's3:GetBucketLocation'
+            Resource:
+              Fn::Sub: arn:aws:s3:::${pRdsBucketName}
+          - Effect: Allow
+            Action:
+              - 's3:GetObjectMetaData'
+              - 's3:GetObject'
+              - 's3:PutObject'
+              - 's3:ListMultipartUploadParts'
+              - 's3:AbortMultipartUpload'
+            Resource:
+              !Join [ "", [ "arn:aws:s3:::", !Ref pRdsBucketName, "/*" ] ]
+      # Roles:
+      #   - 'YOUR_APP_CODE-YOUR_PROJECT_NAME-dev-rds-role'
+
+  #Rol para monitoreo de la BD
+  rEnhancedMonitoringRoleref:
+    Type: AWS::IAM::Role
+    Properties:
+      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/YOUR_GOVERNANCE_BOUNDARY_POLICY
+      RoleName:
+        Fn::Join: [ "-", [ Ref: pImportBase, "RDSEnhancedMonitoringRoleApp-ref" ] ]
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ''
+            Effect: Allow
+            Principal:
+              Service: monitoring.rds.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole
+      Path: "/"
+
+  #Recurso RDS Base de Datos Oracle
+  rDataBasesref:
+    Type: 'AWS::RDS::DBInstance'
+    DependsOn: rParameterGroupParameterStore
+    Properties:
+      CACertificateIdentifier:
+        Ref: pSSLcertificate
+      CopyTagsToSnapshot: true
+      DBName:
+        Ref: pDBName
+      DBInstanceIdentifier:
+        Fn::Join: [ "-", [ Ref: pImportBase, "ref" ] ]
+      VPCSecurityGroups:
+        - Ref: rDBSecurityGroupsref
+        - Ref: pSSMDBSGTransversal
+      AllocatedStorage:
+        Ref: pAllocatedStorage
+      MaxAllocatedStorage:
+        Ref: pMaxAllocatedStorage
+      DBSnapshotIdentifier:
+        Fn::If:
+          - cEmptySnapshot
+          - Ref: AWS::NoValue
+          - Ref: pSnapshotIdentifier
+      StorageType:
+        Ref: pStorageType
+      Iops:
+        Fn::If:
+          - cTypeStorage
+          - Ref: pIopsAprovicionados
+          - Ref: AWS::NoValue
+      DBInstanceClass:
+        Ref: pRdsclassintance
+      Engine:
+        Fn::FindInMap:
+          - Ref: pDataBase
+          - Ref: pEnvironment
+          - Engine
+      EngineVersion:
+        Ref: pEngineVersion
+      PerformanceInsightsRetentionPeriod:
+        Fn::FindInMap:
+          - Ref: pDataBase
+          - Ref: pEnvironment
+          - PerformanceInsightsRetentionPeriod
+      EnablePerformanceInsights:
+        Fn::FindInMap:
+          - Ref: pDataBase
+          - Ref: pEnvironment
+          - EnablePerformanceInsights
+      LicenseModel:
+        Ref: pLicenseModel
+      Port:
+        Fn::FindInMap:
+          - Ref: pDataBase
+          - Ref: pEnvironment
+          - port
+      KmsKeyId:
+        Fn::Join: [ "", [ "{{resolve:ssm:", Ref: pImportBase, "-kms:1}}" ] ]
+      CharacterSetName:
+        Ref: pCharacterSetName
+      MultiAZ:
+        Fn::FindInMap:
+          - Ref: pDataBase
+          - Ref: pEnvironment
+          - MultiAZ
+      EnableCloudwatchLogsExports:
+        Fn::FindInMap:
+          - Ref: pDataBase
+          - Ref: pEnvironment
+          - EnableCloudwatchLogsExports
+      MasterUsername:
+        Fn::Join: [ '', [ '{{resolve:secretsmanager:', Ref: rSecretAdminRDS, ':SecretString:username}}' ] ]
+      MasterUserPassword:
+        Fn::Join: [ '', [ '{{resolve:secretsmanager:', Ref: rSecretAdminRDS, ':SecretString:password}}' ] ]
+      PreferredBackupWindow:
+        Fn::FindInMap:
+          - Ref: pDataBase
+          - Ref: pEnvironment
+          - PreferredBackupWindow
+      DBParameterGroupName:
+        Fn::Join: [ "", [ "{{resolve:ssm:", Ref: rParameterGroupParameterStore, ":1}}" ] ]
+        #'{{resolve:ssm:rParameterGroupParameterStore:1}}'
+        # Fn::FindInMap:
+        # - Ref: pDataBase
+        # - Ref: pEnvironment
+        # - parameterGroup
+      StorageEncrypted: true
+      AutoMinorVersionUpgrade: true
+      AllowMajorVersionUpgrade: true
+      #EnablePerformanceInsights: true
+      PreferredMaintenanceWindow:
+        Fn::FindInMap:
+          - Ref: pDataBase
+          - Ref: pEnvironment
+          - PreferredMaintenanceWindow
+      DBSubnetGroupName:
+        Fn::Sub: '${pEnvironment}-db-subnets2'
+      OptionGroupName:
+        Fn::FindInMap:
+          - Ref: pDataBase
+          - Ref: pEnvironment
+          - OptionGroup
+      DeletionProtection:
+        Fn::FindInMap:
+          - Ref: pDataBase
+          - Ref: pEnvironment
+          - DeletionProtection
+      PubliclyAccessible: false
+      DeleteAutomatedBackups: true
+      BackupRetentionPeriod:
+        Fn::FindInMap:
+          - Ref: pDataBase
+          - Ref: pEnvironment
+          - BackupRetentionPeriod
+      AssociatedRoles:
+        - FeatureName: S3_INTEGRATION
+          RoleArn:
+            Fn::GetAtt: rIAMRoleForRDSref.Arn
+      MonitoringRoleArn: !GetAtt rEnhancedMonitoringRoleref.Arn
+      MonitoringInterval: 60
+      Tags:
+        - Key: organization:clasificacion-confidencialidad
+          Value: "restringida"
+        - Key: organization:clasificacion-integridad
+          Value: "impacto critico"
+        - Key: organization:clasificacion-disponibilidad
+          Value: "impacto critico"
+        - Key: organization:dominio-informacion
+          Value: "no"
+        - Key: organization:datos-personales
+          Value: "no"
+        - Key: organization:cumplimiento
+          Value: "bia"
+        - Key: organization:bkmensual
+          Value: "rds"
+        - Key: organization:bkdiario
+          Value: "rds"
+        - Key: instance:scheduler
+          Value: !Sub '${pinstanceScheduler}'
+    DeletionPolicy: Snapshot
+
+  rDBAOracleEE19ParameterGroup:
+    Type: AWS::RDS::DBParameterGroup
+    Properties:
+      Description: Parameter Group RDS YOUR_PROJECT_NAME
+      Family: oracle-ee-19
+      Parameters:
+        audit_trail: XML,EXTENDED
+        _trace_files_public: FALSE
+        db_writer_processes: 1
+        job_queue_processes: 4000
+        resource_manager_cpu_allocation: 8
+        sec_max_failed_login_attempts: 10
+        undo_retention: 129600
+        db_block_checking: FALSE
+        dml_locks: 9996
+        parallel_max_servers: 320
+        parallel_min_servers: 0
+        parallel_servers_target: 128
+        pre_page_sga: FALSE
+      Tags:
+        - Key: Name
+          Value: !Join [ "", [ !Ref 'AWS::StackName' ,"OracleEE19", "-parametergroup" ] ]
+
+  rSecretAdminRDS:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name:
+        Fn::Sub: '${pImportBase}-secretrdsref-admind'
+      Description:
+        Fn::Sub: 'Secreto del usuario administrador de la base de datos ${pImportBase}.'
+      KmsKeyId: '{{resolve:ssm:YOUR_RDS_ADMIN_KMS_PARAMETER}}'
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "YOUR_DATABASE_ADMIN_USER"}'
+        GenerateStringKey: "password"
+        PasswordLength: 15
+        ExcludeCharacters: '"@/\'
+
+  rSecretAdminRDSInstanceAttachment:
+    Type: AWS::SecretsManager::SecretTargetAttachment
+    Properties:
+      SecretId:
+        Ref: rSecretAdminRDS
+      TargetId:
+        Ref: rDataBasesref
+      TargetType: AWS::RDS::DBInstance
+
+  rSQLScriptsLambdaFunctionCustomResoure:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceToken:
+        Fn::Sub: 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:aw0000-cloud-lb-scripts-rds-function'
+      SecretAdminRDS:
+        Ref: rSecretAdminRDS
+      DatabaseName:
+        Ref: pDBName
+    DependsOn: rSecretAdminRDSInstanceAttachment
+
+  rParameterGroupParameterStore:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Parameter Groups YOUR_PROJECT_NAME
+      Type: String
+      Name: !Join [ "-", [ !Ref 'AWS::StackName', "ParameterGroups" ] ]
+      Value:
+        !Ref rDBAOracleEE19ParameterGroup
+
+  rInstanceRDSParameterStore:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: DBInstanceIdentifier RDS
+      Type: String
+      Name:
+        Fn::Join: [ "-", [ Ref: 'AWS::StackName', "ident" ] ]
+      Value:
+        Ref: rDataBasesref
+
+  rSecurityGroupRDSParameterStore:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Id security group RDS
+      Type: String
+      Name: !Join [ "-", [ !Ref 'AWS::StackName', "sg" ] ]
+      Value:
+        Ref: rDBSecurityGroupsref
+
+  # SOC
+  rLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    #Condition: envPdn
+    Properties:
+      RoleName: !Join [ "-", [ !Ref 'AWS::StackName', "LambdaExecutionRoleref" ] ]
+      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/YOUR_GOVERNANCE_BOUNDARY_POLICY
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: "/"
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "logs:CreateLogStream"
+                  - "logs:DescribeLogGroups"
+                  - "logs:DescribeLogStreams"
+                  - "logs:GetLogGroupFields"
+                  - "logs:DescribeQueries"
+                  - "logs:GetLogRecord"
+                  - "logs:GetQueryResults"
+                  - "logs:CreateLogGroup"
+                  - "logs:PutLogEvents"
+                Resource:
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-stream:*"
+              - Effect: Allow
+                Action:
+                  - "s3:Get*"
+                  - "s3:List*"
+                  - "s3:PutObject"
+                  - "s3:GetObjectVersion"
+                  - "s3:GetObjectACL"
+                  - "s3:PutObjectACL"
+                  - "s3:ObjectOwnerOverrideToBucketOwner"
+                Resource: '*'
+
+  rLambdaSuscriptionRole:
+    Type: AWS::IAM::Role
+    #Condition: envPdn
+    Properties:
+      RoleName: !Join [ "-", [ !Ref 'AWS::StackName', "LambdaSuscriptionRole" ] ]
+      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/YOUR_GOVERNANCE_BOUNDARY_POLICY
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - logs.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: "/"
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "Lambda:InvokeFunction"
+                Resource:
+                  - Fn::GetAtt: rLambdaOraclenotify.Arn
+
+  rLambdaOraclenotify:
+    Type: AWS::Lambda::Function
+    #Condition: envPdn
+    Properties:
+      FunctionName:
+        Fn::Join: [ "-", [ Ref: pImportBase,"MonitoreoSOCref", Ref: pDBName ] ]
+      Role:
+        Fn::GetAtt: rLambdaExecutionRole.Arn
+      Runtime: !Ref pPythonVersion
+      Timeout: 300
+      Handler: lambda_function.lambda_handler
+      Code:
+        S3Bucket: YOUR_PROJECT_CODE-arch-deploy-pdn-bucket
+        S3Key: lambdas/python3.zip
+      Tags:
+        - Key: "organization:clasificacion-confidencialidad"
+          Value: "na"
+        - Key: "organization:clasificacion-integridad"
+          Value: "na"
+        - Key: "organization:clasificacion-disponibilidad"
+          Value: "na"
+
+  rExecutePermission:
+    Type: "AWS::Lambda::Permission"
+    #Condition: envPdn
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName:
+        !GetAtt rLambdaOraclenotify.Arn
+      Principal: !Sub 'logs.${AWS::Region}.amazonaws.com'
+      SourceArn: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${pLogGroupName}:*'
+
+  rLambdaCWLogs:
+    Type: AWS::Logs::SubscriptionFilter
+    #Condition: envPdn
+    Properties:
+      FilterPattern:
+        Ref: pFilters
+      LogGroupName:
+        Ref: pLogGroupName
+      DestinationArn:
+        !GetAtt rLambdaOraclenotify.Arn
+## Fin SOC
+
+Outputs:
+  JDBCConnectionString:
+    Description: JDBC connection string for the database
+    Value:
+      Fn::Join:
+        - ''
+        - - 'jdbc:'
+          - Ref: pDataBase
+          - '://'
+          - Fn::GetAtt:
+              - rDataBasesref
+              - Endpoint.Address
+          - ':'
+          - Fn::GetAtt:
+              - rDataBasesref
+              - Endpoint.Port
+          - /
+          - Ref: pDBName

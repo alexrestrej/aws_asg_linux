@@ -1,0 +1,48 @@
+{
+    "version": "1.0.0",
+    "title": "Validate database availability.",
+    "description": "Database consuming services must be highly available when a database instance is restarted and forced failover.",
+    "tags": [
+        "Application-Code:#{app_code}#",
+        "Project-Name:#{project_name}#",
+        "AWS-Service:RDS"
+    ],
+    "configuration": {},
+    "steady-state-hypothesis": {
+        "title": "Services availables and healthy",
+        "probes": [
+            {
+                "name": "instance-db-status",
+                "type": "probe",
+                "tolerance": "available",
+                "provider": {
+                    "type": "python",
+                    "module": "chaosaws.rds.probes",
+                    "func": "instance_status",
+                    "arguments": {
+                        "instance_id": "#{db_identifier}#"
+                    }
+                }
+            }
+        ]
+    },
+    "method": [
+        {
+            "name": "reboot-db-instance",
+            "type": "action",
+            "provider": {
+                "type": "python",
+                "module": "chaosaws.rds.actions",
+                "func": "reboot_db_instance",
+                "arguments": {
+                    "db_instance_identifier": "#{db_identifier}#",
+                    "force_failover": true
+                }
+            },
+            "pauses": {
+                "after": #{time}#
+            }
+        }
+    ],
+    "rollbacks": []
+}

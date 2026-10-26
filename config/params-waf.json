@@ -1,0 +1,27 @@
+[
+    {
+        "ParameterKey": "CNAME",
+        "ParameterValue": "#{alb-name-waf}#"
+    },
+    {
+        "ParameterKey": "CommonName",
+        "ParameterValue": "#{app-enroll-url}#"
+    },
+    {
+        "ParameterKey": "SANS",
+        "ParameterValue": "#{app-enroll-url}#"
+    },
+    {
+        "ParameterKey": "Categoria",
+        "ParameterValue": "#{cer-cat}#"
+    },
+    {
+        "ParameterKey": "ARNLambda",
+        "ParameterValue": "#{arn-lambda-waf}#"
+    },
+    {
+        "ParameterKey": "Ambiente",
+        "ParameterValue": "#{env}#"
+    }
+    
+]

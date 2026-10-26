@@ -1,0 +1,63 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Plantillas anidadas
+Parameters:
+  ARNLambda:
+    Type: String
+    Description: Seleccione el ARN Topic SNS Lambda segun el ambiente.
+
+  Ambiente:
+    Type: String
+    Description: Ingresa ambiente de instalacion
+    AllowedValues:
+      - dev
+      - qa
+      - pdn
+
+  CommonName:
+    Type: String
+    Description: Ingresa CommonName (Host+Domain Name)
+
+  SANS:
+    Type: String
+    Description: Nombre alternativo, si no se tiene, se define el mismo common name
+
+  Categoria:
+    Type: String
+    Description: Categoria del certificado a utilizar
+    Default: dv
+
+  CNAME:
+    Type: String
+    Description: Ingrese el nombre del ALB o Cloudfront por el cual se expone la aplicacion.
+
+Resources:
+  customResource:
+    Type: 'AWS::CloudFormation::CustomResource'
+    Version: '1.0'
+    Properties:
+      ServiceToken:
+        Ref: ARNLambda
+      CommonName:
+        Ref: CommonName
+      SANS:
+        Ref: SANS
+      Ambiente:
+        Ref: Ambiente
+      Categoria:
+        Ref: Categoria
+      CNAME:
+        Ref: CNAME
+
+Outputs:
+  Data:
+    Description: Respuesta
+    Value: !GetAtt customResource.Data
+  SiteID:
+    Description: Respuesta
+    Value: !GetAtt customResource.SiteID
+  txtrecord:
+    Description: Respuesta
+    Value: !GetAtt customResource.txt_record
+  cname:
+    Description: Respuesta
+    Value: !GetAtt customResource.cname

@@ -1,0 +1,22 @@
+[
+    {
+        "ParameterKey": "pAppBucketName",
+        "ParameterValue": "#{s3-bucket}#"
+    },
+    {
+        "ParameterKey": "pPSKMSARN",
+        "ParameterValue": "#{ps-kms-arn}#"
+    },
+    {
+        "ParameterKey": "pCustomKMS",
+        "ParameterValue": "#{arn-kms-shared}#"
+    },
+    {
+        "ParameterKey": "pSecretManagerCertARN",
+        "ParameterValue": "#{arn-secretmanager-cert-passwd}#"
+    },
+    {
+        "ParameterKey": "pImportBase",
+        "ParameterValue": "#{application-code}#-#{project-name}#-#{env}#"
+    }
+]

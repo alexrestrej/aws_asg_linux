@@ -1,0 +1,367 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  This Cloud Formation template deploy an ELB Load Balancer, with Target Group
+
+Parameters:
+
+  pPublicSubnets:
+    Description: Public subnets for application load balancer
+    Type: String
+
+  pSchemaALB:
+    Description: Tipo de NLB, Internal o internet-facing.
+    Type: String
+
+  pNameALB:
+    Description: Name ALB.
+    Type: String
+
+  pSslPolicy:
+    Description: Indique la politica de seguridad a usar. (ELBSecurityPolicy-TLS-1-2-Ext-2018-06)
+    Type: String
+
+  pS3LogsALB:
+    Type: String
+    Description: The S3 bucket name that contains ALB logs.
+
+  pPSSGWAF:
+    Description: ALB SG value in the Parameter Store.
+    Type: String
+
+  pArnAlb:
+    Type: String
+    Description: ARN of ALB certificate.
+
+  pEnvironment:
+    Description: Ambiente
+    Type: String
+
+  pArnKMS:
+    Type: String
+    Description: ARN of ALB certificate.
+
+  ################ Parametros para shield ################
+
+  ShieldBucketName:
+    Type: String
+    Default: YOUR_SECURITY_LOG_BUCKET_PROD #Nombre del bucket para centralizaci?n de logs - Cuenta seguridad PDN - NO SE PUEDE MODIFICAR
+
+  ShieldBucketNameDev:
+    Type: String
+    Default: YOUR_SECURITY_LOG_BUCKET_NONPROD #Nombre del bucket para centralizaci?n de logs - Cuenta seguridad PDN - NO SE PUEDE MODIFICAR
+
+  SampleLoadBalancer:
+    Type: String
+    Default: arn:aws:elasticloadbalancing:us-east-1:YOUR_AWS_ACCOUNT_ID:loadbalancer/app/YOUR_LOAD_BALANCER_NAME/8593e8e571d2eba3   #Definir ARN del balanceador que se va a proteger
+
+  DomainLoadBalancer:
+    Type: String
+    Default: YOUR_LOAD_BALANCER_DNS_NAME  #Definir el DNS del balanceador que se va a proteger (No puede ser el asignado en route53, debe ser el dns con el que nace el ALB por default)
+
+  ProjectName:
+    Type: String
+    Default: YOUR_PROJECT_NAME  # En este parametro se debe referenciar el project-name de la aplicacion
+
+  AppCode:
+    Type: String
+    Default: YOUR_APP_CODE  # Aqui se debe referenciar el codigo de la aplicacionn
+
+  EmailHealthcheck:
+    Type: String
+    Default: xxxxxx@YOUR_ORGANIZATION_DOMAIN   #Se debe definir el correo o lista de distribuci?n a quienes les llegaran las alertas de caida del servicio.
+
+  ## Parametros Target Group
+  pHealthCheckInterval:
+    Description: Intervalo de tiempo entre verificaciones de health.
+    Type: String
+    Default: 60
+
+  pHealthCheckCount:
+    Description: Cantidad de checks antes de marcar como healthy.
+    Type: String
+    Default: 5
+
+  pUnhealthCheckCount:
+    Description: Cantidad de checks antes de marcar como unhealthy.
+    Type: String
+    Default: 2
+
+Conditions:
+  NotDevEnv:
+    Fn::Or:
+      - Fn::Equals: [Ref: pEnvironment, "qa"]
+      - Fn::Equals: [Ref: pEnvironment, "pdn"]
+  ############ Condiciones para shield #############
+
+  CreateProdStream: !Equals
+    - !Ref pEnvironment
+    - pdn
+  CreateDevQAStream: !Not
+    - !Equals
+      - !Ref pEnvironment
+      - pdn
+    #CreateDevQAStream: !Equals
+    #- !Ref pEnvironment
+    #- qa
+  envPdn:
+    Fn::Equals: [ Ref: pEnvironment, "pdn" ]
+  envDev:
+    Fn::Equals: [ Ref: pEnvironment, "dev" ]
+  envQa:
+    Fn::Equals: [ Ref: pEnvironment, "qa" ]
+
+
+Resources:
+
+  rApplicationLoadBalancerExt:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    #Condition: NotDevEnv
+    Properties:
+      Name: !Ref pNameALB
+      Scheme: internet-facing
+      Type: application
+      LoadBalancerAttributes:
+        - Key: access_logs.s3.enabled
+          Value: "true"
+        - Key: access_logs.s3.bucket
+          Value: !Ref pS3LogsALB
+        - Key: access_logs.s3.prefix
+          Value: "ALBLogs"
+        - Key: deletion_protection.enabled
+          Value: "true"
+      SecurityGroups:
+        - !Join ["", ["{{resolve:ssm:", !Ref pPSSGWAF, "}}"]]
+      Subnets:
+        Fn::Split:
+          - ','
+          - Ref: pPublicSubnets
+
+  rALBTargetGroupAppHTTPSExt:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    #Condition: NotDevEnv
+    Properties:
+      HealthCheckIntervalSeconds: !Ref pHealthCheckInterval
+      HealthyThresholdCount: !Ref pHealthCheckCount
+      UnhealthyThresholdCount: !Ref pUnhealthCheckCount
+      HealthCheckPath: /detect/
+      TargetType: instance
+      Port: 8443
+      Protocol: HTTPS
+      VpcId:
+        Fn::ImportValue: DefaultVPCId
+      Tags:
+        - Key: Name
+          Value:  !Join ["-", [!Ref 'AWS::StackName', "https-tg-ext"]]
+
+  rALBListenerAppHTTPSExt:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    #Condition: NotDevEnv
+    Properties:
+      LoadBalancerArn: !Ref rApplicationLoadBalancerExt
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref pArnAlb
+      SslPolicy: !Ref pSslPolicy
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref rALBTargetGroupAppHTTPSExt
+
+  rALBTargetGroupAppArnParameterStoreHTTPSExt:
+    Type: AWS::SSM::Parameter
+    #Condition: NotDevEnv
+    Properties:
+      Description: The ARN of ALB target group
+      Type: String
+      Name: !Join ["-", [!Ref 'AWS::StackName', "https-tg-ext"]]
+      Value:
+        Ref: rALBTargetGroupAppHTTPSExt
+
+  rALBFullNameParameterStore:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: The full name of the load balancer
+      Type: String
+      Name: !Join ["-", [!Ref 'AWS::StackName', "full-name"]]
+      Value:
+        Fn::GetAtt: [rApplicationLoadBalancerExt, LoadBalancerFullName]
+
+  ############# Template para recursos de DDOS #############
+
+  myHealthCheck:
+    Type: 'AWS::Route53::HealthCheck'
+    #Condition: NotDevEnv
+    Properties:
+      HealthCheckConfig:
+        FullyQualifiedDomainName: !Ref DomainLoadBalancer
+        Port: 443
+        Type: HTTPS
+        RequestInterval: 30
+        FailureThreshold: 3
+      HealthCheckTags:
+        - Key: Name
+          Value: !Join
+            - ''
+            - - 'HealthCheckShield:'
+              - !Ref AppCode
+
+  Alarm:
+    Type: AWS::CloudWatch::Alarm
+    #Condition: NotDevEnv
+    Properties:
+      AlarmDescription: Health Check Alarm
+      AlarmName: !Join [ '',[ 'HealthCheckAlarmAlb-', !Ref AppCode ] ]
+      Namespace: AWS/Route53
+      MetricName: HealthCheckStatus
+      TreatMissingData: notBreaching
+      Dimensions:
+        - Name: HealthCheckId
+          Value:
+            Ref: myHealthCheck
+      ComparisonOperator: LessThanThreshold
+      Period: '60'
+      EvaluationPeriods: '5'
+      Statistic: Minimum
+      Threshold: '1.0'
+      AlarmActions:
+        - Ref: AlarmSNSTopic
+
+  AlarmACLCount:
+    Type: AWS::CloudWatch::Alarm
+    #Condition: NotDevEnv
+    Properties:
+      AlarmDescription: ACL Count
+      AlarmName: !Join [ '',[ 'ACLALBCountAlarm-', !Ref AppCode ] ]
+      Namespace: AWS/WAFV2
+      MetricName: CountedRequests
+      TreatMissingData: notBreaching
+      Dimensions:
+        - Name: Rule
+          Value: RateBasedRuleCount
+        - Name: Region
+          Value: !Ref 'AWS::Region'
+        - Name: WebACL
+          Value: !Ref 'AWS::StackName'
+      ComparisonOperator: GreaterThanThreshold
+      Period: '60'
+      DatapointsToAlarm: '1'
+      EvaluationPeriods: '1'
+      Statistic: Sum
+      Threshold: '0'
+      AlarmActions:
+        - Ref: AlarmSNSTopic
+
+  AlarmDDoS:
+    Type: AWS::CloudWatch::Alarm
+    #Condition: NotDevEnv
+    Properties:
+      AlarmDescription: DDoSAttack
+      AlarmName: !Join [ '',[ 'DDoSAttackAlb-', !Ref AppCode ] ]
+      Namespace: AWS/DDoSProtection
+      MetricName: DDoSDetected
+      Dimensions:
+        - Name: ResourceArn
+          Value:
+            Ref: rApplicationLoadBalancerExt
+      ComparisonOperator: GreaterThanThreshold
+      Period: '60'
+      EvaluationPeriods: '2'
+      Statistic: Maximum
+      Threshold: '0.0'
+      AlarmActions:
+        - Ref: AlarmSNSTopic
+
+  AlarmSNSTopic:
+    Type: AWS::SNS::Topic
+    #Condition: NotDevEnv
+    Properties:
+      KmsMasterKeyId: !Ref pArnKMS
+      Subscription:
+        - Endpoint: OPC05Capacidadestransversales@YOUR_ORGANIZATION_DOMAIN
+          Protocol: email
+        - Endpoint: Gestion_AntiDDoS@YOUR_ORGANIZATION_DOMAIN
+          Protocol: email
+        - Endpoint: !Ref EmailHealthcheck
+          Protocol: email
+      Tags:
+        - Key: organization:clasificacion-confidencialidad
+          Value: "restringida"
+        - Key: organization:clasificacion-integridad
+          Value: "impacto critico"
+        - Key: organization:clasificacion-disponibilidad
+          Value: "impacto critico"
+
+  setProactiveEngagementALB2:
+    Type: 'Custom::wafsetloggingALB2'
+    #Condition: NotDevEnv
+    Properties:
+      ServiceToken: 'arn:aws:sns:us-east-1:YOUR_AWS_ACCOUNT_ID:Antiddos-engagement-sns'
+      protectArn: !Ref rApplicationLoadBalancerExt
+      healthcheckarn: !Join [ '/',[ 'arn:aws:route53:::healthcheck',!Ref myHealthCheck ] ]
+
+  setCustomACLImperva:
+    Type: 'Custom::CustomACLImperva'
+    #Condition: NotDevEnv
+    Properties:
+      ServiceToken: 'arn:aws:sns:us-east-1:YOUR_AWS_ACCOUNT_ID:Antiddos-WAF provider-sns'
+      ipsetname: IpSetAlb
+      scope: REGIONAL
+
+  setCustomLogging:
+    Type: 'Custom::CustomLogging'
+    #Condition: NotDevEnv
+    Properties:
+      ServiceToken: 'arn:aws:sns:us-east-1:YOUR_AWS_ACCOUNT_ID:Antiddos-logging-sns'
+      ipsetname: IpSetHealthcheck
+      scope: REGIONAL
+
+  setCustomACLUpdateQA:
+    Type: 'Custom::customaclupdate'
+    Condition: CreateProdStream
+    Condition: envQa
+    Properties:
+      ServiceToken: 'arn:aws:sns:us-east-1:YOUR_AWS_ACCOUNT_ID:Antiddos-ACLUpdate-sns'
+      resource_arn: !Ref rApplicationLoadBalancerExt
+      scope: REGIONAL
+      ipset_imperva: IpSetAlb
+      ipset_route53: IpSetHealthcheck
+      Kinesis_arn: !Sub 'arn:aws:firehose:${AWS::Region}:${AWS::AccountId}:deliverystream/aws-waf-logs-pdn-${AWS::AccountId}'
+      change_webacl: true
+      waf_name: Regional2     # posibles valores Regional1, Regional2
+
+  setCustomACLUpdatePdn:
+    Type: 'Custom::customaclupdate'
+    Condition: CreateProdStream
+    Condition: envPdn
+    Properties:
+      ServiceToken: 'arn:aws:sns:us-east-1:YOUR_AWS_ACCOUNT_ID:Antiddos-ACLUpdate-sns'
+      resource_arn: !Ref rApplicationLoadBalancerExt
+      scope: REGIONAL
+      ipset_imperva: IpSetAlb
+      ipset_route53: IpSetHealthcheck
+      Kinesis_arn: !Sub 'arn:aws:firehose:${AWS::Region}:${AWS::AccountId}:deliverystream/aws-waf-logs-pdn-${AWS::AccountId}'
+      change_webacl: true
+      waf_name: Regional1     # posibles valores Regional1, Regional2
+
+  setCustomACLUpdateDevQa:
+    Type: 'Custom::customaclupdate'
+    Condition: CreateDevQAStream
+    Properties:
+      ServiceToken: 'arn:aws:sns:us-east-1:YOUR_AWS_ACCOUNT_ID:Antiddos-ACLUpdate-sns'
+      resource_arn: !Ref rApplicationLoadBalancerExt
+      scope: REGIONAL
+      ipset_imperva: IpSetAlb
+      ipset_route53: IpSetHealthcheck
+      Kinesis_arn: !Sub 'arn:aws:firehose:${AWS::Region}:${AWS::AccountId}:deliverystream/aws-waf-logs-devqa-${AWS::AccountId}'
+      change_webacl: true
+      waf_name: Regional2     # posibles valores: Regional2
+
+Outputs:
+  rALBTargetGroupAppArnHTTPS:
+    Description: The ARN of ALB target group
+    Value:
+      Ref: rALBTargetGroupAppHTTPSExt
+  rNLBFullName:
+    Description: The full name of the load balancer.
+    Value:
+      Fn::GetAtt: [rApplicationLoadBalancerExt, LoadBalancerFullName]

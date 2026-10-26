@@ -1,0 +1,73 @@
+[
+    {
+        "ParameterKey": "pEnvironment",
+        "ParameterValue": "#{env}#"
+    },
+    {
+        "ParameterKey": "pDataBase",
+        "ParameterValue": "#{rds-data-base}#"
+    },
+    {
+        "ParameterKey": "pAllocatedStorage",
+        "ParameterValue": "#{rds-allocated-storage}#"
+    },
+    {
+        "ParameterKey": "pStorageType",
+        "ParameterValue": "#{rds-storage-type}#"
+    },
+    {
+        "ParameterKey": "pImportBase",
+        "ParameterValue": "#{application-code}#-#{project-name}#-#{env}#"
+    },
+    {
+        "ParameterKey": "pDBName",
+        "ParameterValue": "#{rds-db-name}#"
+    },
+
+    {
+        "ParameterKey": "pMaxAllocatedStorage",
+        "ParameterValue": "#{rds-max-allocated-storage}#"
+    },
+
+    {
+        "ParameterKey": "pRdsBucketName",
+        "ParameterValue": "#{s3-bucket-rds}#"
+    },
+    {
+        "ParameterKey": "pSGTrasnversal",
+        "ParameterValue": "#{rds-sg-trasnversal}#"
+    }
+    ,
+    {
+        "ParameterKey": "pRdsclassintance",
+        "ParameterValue": "#{rds-instance-class-replicate}#"
+    },
+    {
+        "ParameterKey": "pPSRDS",
+        "ParameterValue": "#{rds-sg-db}#"
+    }
+    ,
+    {
+        "ParameterKey": "pCreateReplicateRDS",
+        "ParameterValue": "#{rds-create-replicate}#"
+    }  
+    ,
+    {
+        "ParameterKey": "pIDreplicateRDS",
+        "ParameterValue": "#{rds-id-replicate}#"
+    }  
+    ,
+    {
+        "ParameterKey": "pIopsAprovicionados",
+        "ParameterValue": "#{rds-Iops-Aprovicionados}#"
+    },
+    {
+        "ParameterKey": "pSSLcertificate",
+        "ParameterValue": "#{rds-ssl-certificate}#"
+    },
+    {
+        "ParameterKey": "pSGTrasnversal",
+        "ParameterValue": "#{rds-transversal-sg}#"
+    }
+    
+]

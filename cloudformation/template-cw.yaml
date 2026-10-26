@@ -1,0 +1,673 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: 'This template deploys a CloudWatch / Alarms / SNS Topics'
+
+Parameters:
+  pAlarmAlias:
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+  pAlertWrapperTopic:
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+  pSNSAppTopicEmail:
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+  pSNSDBATopicEmail:
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+  pSNSInfraTopicEmail:
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+  pSNSDBATopicEmailGioti:
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+  pSNSDBATopicEmailMonit:
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+  pSNSDBATopicEmailMonitCC:
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+  pbucketName1:
+    Type: String
+    Description: Bucket Name 1
+  pbucketName2:
+    Type: String
+    Description: Bucket Name 2
+  pbucketName3:
+    Type: String
+    Description: Bucket Name 3
+  pbucketName4:
+    Type: String
+    Description: Bucket Name 4
+  pEnvironment:
+    Description: mapping Enviroment name
+    Type: String
+  pPSKMS:
+    Description: KMS ARN value in Parameter Store
+    Type: String   
+
+Conditions:
+  CreatePdnResources: !Equals [!Ref pEnvironment, "pdn"]
+  CreateQaResources: !Equals [!Ref pEnvironment, "qa"]
+  CreateDevResources: !Equals [!Ref pEnvironment, "dev"]
+  cIntermedio:
+    Fn::Or:
+      - Fn::Equals: [Ref: pEnvironment, "qa"] 
+      - Fn::Equals: [Ref: pEnvironment, "dev"]
+Resources:
+### Topics
+  rSNSInfraTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: !Join [ "-", [ !Ref pAlarmAlias, "Infra-SNS"]]
+      KmsMasterKeyId: !Join ["", ["arn:aws:kms:",!Ref 'AWS::Region',":",!Ref 'AWS::AccountId',":key/{{resolve:ssm:", !Ref pPSKMS, "}}"]]
+      Subscription:
+      - Endpoint: !Ref "pSNSInfraTopicEmail"
+        Protocol: email
+      Tags:
+        - Key: organization:clasificacion-confidencialidad
+          Value: "restringida"
+        - Key: organization:clasificacion-integridad
+          Value: "impacto critico"
+        - Key: organization:clasificacion-disponibilidad
+          Value: "impacto critico"
+
+  rSNSDBATopic:
+    Type: AWS::SNS::Topic
+    Condition: cIntermedio
+    Properties:
+      DisplayName: !Join [ "-", [ !Ref pAlarmAlias, "DBA-SNS"]]
+      KmsMasterKeyId: !Join ["", ["arn:aws:kms:",!Ref 'AWS::Region',":",!Ref 'AWS::AccountId',":key/{{resolve:ssm:", !Ref pPSKMS, "}}"]]
+      Subscription:
+      - Endpoint: !Ref "pSNSDBATopicEmail"
+        Protocol: email
+      Tags:
+        - Key: organization:clasificacion-confidencialidad
+          Value: "restringida"
+        - Key: organization:clasificacion-integridad
+          Value: "impacto critico"
+        - Key: organization:clasificacion-disponibilidad
+          Value: "impacto critico"
+
+  rSNSDBATopic2:
+    Type: AWS::SNS::Topic
+    Condition: CreatePdnResources
+    Properties:
+      DisplayName: !Join [ "-", [ !Ref pAlarmAlias, "DBA-SNS"]]
+      KmsMasterKeyId: !Join ["", ["arn:aws:kms:",!Ref 'AWS::Region',":",!Ref 'AWS::AccountId',":key/{{resolve:ssm:", !Ref pPSKMS, "}}"]]
+      Subscription:
+      - Endpoint: !Ref "pSNSDBATopicEmail"
+        Protocol: email
+      - Endpoint: !Ref "pSNSDBATopicEmailGioti"
+        Protocol: email
+      - Endpoint: !Ref "pSNSDBATopicEmailMonit"
+        Protocol: email
+      - Endpoint: !Ref "pSNSDBATopicEmailMonitCC"
+        Protocol: email
+      Tags:
+        - Key: organization:clasificacion-confidencialidad
+          Value: "restringida"
+        - Key: organization:clasificacion-integridad
+          Value: "impacto critico"
+        - Key: organization:clasificacion-disponibilidad
+          Value: "impacto critico"
+
+  rSNSAppTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: !Join [ "-", [ !Ref pAlarmAlias, "App-SNS"]]
+      KmsMasterKeyId: !Join ["", ["arn:aws:kms:",!Ref 'AWS::Region',":",!Ref 'AWS::AccountId',":key/{{resolve:ssm:", !Ref pPSKMS, "}}"]]
+      Subscription:
+      - Endpoint: !Ref "pSNSAppTopicEmail"
+        Protocol: email
+      Tags:
+        - Key: organization:clasificacion-confidencialidad
+          Value: "restringida"
+        - Key: organization:clasificacion-integridad
+          Value: "impacto critico"
+        - Key: organization:clasificacion-disponibilidad
+          Value: "impacto critico"
+### S3
+  OpsEventRuleS3:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: S3-DeleteBucket-Alarm
+      EventPattern:
+        source:
+          - aws.s3
+        detail-type:
+          - AWS API Call via CloudTrail
+        detail:
+          eventSource:
+            - s3.amazonaws.com
+          eventName:
+            - DeleteBucket
+          requestParameters:
+            bucketName: [ !Ref pbucketName1, !Ref pbucketName2, !Ref pbucketName3, !Ref pbucketName4 ]
+      State: ENABLED
+
+  rOpsEventRuleS3Alarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+      - Ref: rSNSInfraTopic
+      AlarmDescription: !Join [ ": ", [ 'DCMCustom', !Ref pAlarmAlias, 'A S3 bucket was deleted in account' ]]
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+      - Name: RuleName 
+        Value: !Ref OpsEventRuleS3
+      EvaluationPeriods: 1
+      MetricName: TriggeredRules
+      Namespace: AWS/Events
+      Period: 60
+      Statistic: Maximum
+      Threshold: 1
+      TreatMissingData: 'notBreaching'
+  
+  rAlarmDatabaseConnections:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Join [ "-", [ !Ref pAlarmAlias, " DatabaseConnections_rds_greater" ] ]
+      AlarmDescription: "Las conexiones a la base datos son mayor a 900"
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+      - Name: DBInstanceIdentifier
+        Value: !Join [ "-", [!Ref pAlarmAlias, "rds" ]]
+      EvaluationPeriods: 2
+      MetricName: DatabaseConnections
+      Namespace: AWS/RDS
+      Period: 60
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Statistic: Average
+      Threshold: 900
+      TreatMissingData: breaching
+      AlarmActions: 
+        - Ref: pAlertWrapperTopic
+      TreatMissingData: notBreaching
+
+  rAlarmDatabaseConnectionsrds:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Join [ "-", [ !Ref pAlarmAlias, " DatabaseConnections_rds_less" ] ]
+      AlarmDescription: "Las conexiones a la base datos son menor a 500"
+      ComparisonOperator: LessThanOrEqualToThreshold
+      Dimensions:
+      - Name: DBInstanceIdentifier
+        Value: !Join [ "-", [!Ref pAlarmAlias, "rds" ]]
+      EvaluationPeriods: 2
+      MetricName: DatabaseConnections
+      Namespace: AWS/RDS
+      Period: 60
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Statistic: Average
+      Threshold: 500
+      TreatMissingData: breaching
+      AlarmActions: 
+        - Ref: pAlertWrapperTopic
+      TreatMissingData: notBreaching
+
+###CLOUDWATCH DASHBOARD
+### Dashboard PDN 
+  rDashboardPnd:
+    Type: AWS::CloudWatch::Dashboard
+    Condition: CreatePdnResources
+    Properties:
+      DashboardName: !Ref pAlarmAlias
+      DashboardBody: 
+        Fn::Sub: |
+                    {
+                        "widgets": [
+                            {
+                                "height": 2,
+                                "width": 6,
+                                "y": 16,
+                                "x": 6,
+                                "type": "alarm",
+                                "properties": {
+                                    "title": "Certificado",
+                                    "alarms": [
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-arn:aws:acm:us-east-1:YOUR_AWS_ACCOUNT_ID:certificate/YOUR_RESOURCE_ID-ACM certificate 5 days to expire",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-arn:aws:acm:us-east-1:YOUR_AWS_ACCOUNT_ID:certificate/YOUR_RESOURCE_ID-ACM certificate 5 days to expire"
+                                    ]
+                                }
+                            },
+                            {
+                                "height": 2,
+                                "width": 24,
+                                "y": 6,
+                                "x": 0,
+                                "type": "alarm",
+                                "properties": {
+                                    "title": "RDS",
+                                    "alarms": [
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-rds-RDS- Disk Used is high",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-rds-RDS-CPU is high",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-rds-RDS- Memory Used is high",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-rds-RDS- Swap space used",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-rds-RDS- disk requests pending are high"
+                                    ]
+                                }
+                            },
+                            {
+                                "height": 2,
+                                "width": 12,
+                                "y": 16,
+                                "x": 12,
+                                "type": "alarm",
+                                "properties": {
+                                    "title": "ASG",
+                                    "alarms": [
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-asg-rAutoScaling-YOUR_ASG_RESOURCE_ID-CPUHighASGatMax",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-asg-rAutoScaling-YOUR_ASG_RESOURCE_ID-NoInstancesInService",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-i-YOUR_INSTANCE_ID-CWAgentdiskusedpercenthigh80",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-i-YOUR_INSTANCE_ID-CWAgentdiskusedpercenthigh80",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-i-YOUR_INSTANCE_ID-CWAgentdiskusedpercenthigh80",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-i-YOUR_INSTANCE_ID-CWAgentdiskusedpercenthigh90",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-i-YOUR_INSTANCE_ID-Swap Used Percentage is high",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-i-YOUR_INSTANCE_ID-CWAgentdiskusedpercenthigh90",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-i-YOUR_INSTANCE_ID-CWAgentdiskusedpercenthigh90",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-i-YOUR_INSTANCE_ID-CWAgentdiskusedpercenthigh80",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-i-YOUR_INSTANCE_ID-Swap Used Percentage is high",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-i-YOUR_INSTANCE_ID-Swap Used Percentage is high",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-i-YOUR_INSTANCE_ID-Swap Used Percentage is high",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-i-YOUR_INSTANCE_ID-CWAgentdiskusedpercenthigh90",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-i-YOUR_INSTANCE_ID-Swap Used Percentage is high",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-i-YOUR_INSTANCE_ID-CWAgentdiskusedpercenthigh80",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-i-YOUR_INSTANCE_ID-CWAgentdiskusedpercenthigh80",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-i-YOUR_INSTANCE_ID-Swap Used Percentage is high",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-i-YOUR_INSTANCE_ID-CWAgentdiskusedpercenthigh90",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-i-YOUR_INSTANCE_ID-CWAgentdiskusedpercenthigh90",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-i-YOUR_INSTANCE_ID-CWAgentdiskusedpercenthigh90",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-i-YOUR_INSTANCE_ID-CWAgentdiskusedpercenthigh80",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-i-YOUR_INSTANCE_ID-CWAgentdiskusedpercenthigh80",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-i-YOUR_INSTANCE_ID-Swap Used Percentage is high",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-i-YOUR_INSTANCE_ID-Swap Used Percentage is high",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-i-YOUR_INSTANCE_ID-CWAgentdiskusedpercenthigh90",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-i-YOUR_INSTANCE_ID-CWAgentdiskusedpercenthigh80",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-i-YOUR_INSTANCE_ID-Swap Used Percentage is high",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-i-YOUR_INSTANCE_ID-CWAgentdiskusedpercenthigh90"
+                                        
+                                    ]
+                                }
+                            },
+                            {
+                                "height": 2,
+                                "width": 24,
+                                "y": 14,
+                                "x": 0,
+                                "type": "alarm",
+                                "properties": {
+                                    "title": "ALB",
+                                    "alarms": [
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-app/YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-albExt/1071420e0410f388-ALB-HTTP Error Code 5XX by Target is high",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-app/YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-alb/c492686c7f5a4810-ALB-HTTP Error Code 5XX is high",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-app/YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-albExt/1071420e0410f388-ALB-Connections unsuccessful to Target",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-app/YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-albExt/1071420e0410f388-ALB-HTTP Error Code 5XX is high",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-app/YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-alb/c492686c7f5a4810-ALB-HTTP Error Code 5XX by Target is high",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-app/YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-alb/c492686c7f5a4810-ALB-Connections unsuccessful to Target",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-app/YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-albExt/1071420e0410f388-ALB-Connections are being rejected by LB",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-app/YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-alb/c492686c7f5a4810-ALB-Connections are being rejected by LB"                                        
+                                    ]
+                                }
+                            },
+                            {
+                                "type": "metric",
+                                "x": 0,
+                                "y": 0,
+                                "width": 24,
+                                "height": 6,
+                                "properties": {
+                                    "view": "timeSeries",
+                                    "stacked": false,
+                                    "metrics": [
+                                        [ "AWS/RDS", "EBSByteBalance%", "DBInstanceIdentifier", "YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-rds" ],
+                                        [ ".", "EBSIOBalance%", ".", "." ],
+                                        [ ".", "ReadLatency", ".", "." ],
+                                        [ ".", "DiskQueueDepth", ".", "." ],
+                                        [ ".", "ReadIOPS", ".", "." ],
+                                        [ ".", "FreeStorageSpace", ".", "." ],
+                                        [ ".", "BurstBalance", ".", "." ],
+                                        [ ".", "WriteIOPS", ".", "." ],
+                                        [ ".", "WriteLatency", ".", "." ],
+                                        [ ".", "FreeableMemory", ".", "." ],
+                                        [ ".", "DBLoadNonCPU", ".", "." ],
+                                        [ ".", "DBLoad", ".", "." ],
+                                        [ ".", "NetworkTransmitThroughput", ".", "." ],
+                                        [ ".", "WriteThroughput", ".", "." ],
+                                        [ ".", "ReadThroughput", ".", "." ],
+                                        [ ".", "NetworkReceiveThroughput", ".", "." ],
+                                        [ ".", "CPUUtilization", ".", "." ],
+                                        [ ".", "DatabaseConnections", ".", "." ],
+                                        [ ".", "DBLoadCPU", ".", "." ],
+                                        [ ".", "SwapUsage", ".", "." ]
+                                    ],
+                                    "region": "us-east-1",
+                                    "title": "RDS"
+                                }
+                            },
+                            {
+                                "type": "metric",
+                                "x": 0,
+                                "y": 16,
+                                "width": 6,
+                                "height": 6,
+                                "properties": {
+                                    "view": "timeSeries",
+                                    "stacked": false,
+                                    "metrics": [
+                                        [ "AWS/CertificateManager", "DaysToExpiry", "CertificateArn", "arn:aws:acm:us-east-1:YOUR_AWS_ACCOUNT_ID:certificate/YOUR_RESOURCE_ID" ],
+                                        [ "AWS/CertificateManager", "DaysToExpiry", "CertificateArn", "arn:aws:acm:us-east-1:YOUR_AWS_ACCOUNT_ID:certificate/YOUR_RESOURCE_ID" ]
+                                    ],
+                                    "region": "us-east-1"
+                                }
+                            },
+                            {
+                                "type": "metric",
+                                "x": 0,
+                                "y": 8,
+                                "width": 24,
+                                "height": 6,
+                                "properties": {
+                                    "view": "timeSeries",
+                                    "stacked": false,
+                                    "metrics": [
+                                        [ "AWS/ApplicationELB", "HealthyHostCount", "TargetGroup", "targetgroup/YOUR_APP_CODE-TARGET-GROUP-2CF71VE7NWH4/0abbea224e3652ea", "LoadBalancer", "app/YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-albExt/1071420e0410f388" ],
+                                        [ "AWS/ApplicationELB", "HealthyHostCount", "TargetGroup", "targetgroup/YOUR_APP_CODE-TARGET-GROUP-ZC7YZQIR4QD2/d50031fecf2e561c", "LoadBalancer", "app/YOUR_APP_CODE-YOUR_PROJECT_NAME-pdn-alb/c492686c7f5a4810" ]
+                                    ],
+                                    "region": "us-east-1"
+                                }
+                            }
+                        ]
+                    }
+
+### Dashboard QA 
+  rDashboardQa:
+    Type: AWS::CloudWatch::Dashboard
+    Condition: CreateQaResources
+    Properties:
+      DashboardName: !Ref pAlarmAlias
+      DashboardBody: 
+        Fn::Sub: |
+                    {
+                        "widgets": [
+                            {
+                                "type": "metric",
+                                "x": 0,
+                                "y": 0,
+                                "width": 24,
+                                "height": 6,
+                                "properties": {
+                                    "view": "timeSeries",
+                                    "stacked": false,
+                                    "metrics": [
+                                        [ "AWS/RDS", "FreeableMemory", "DBInstanceIdentifier", "YOUR_APP_CODE-YOUR_PROJECT_NAME-qa-rds" ],
+                                        [ ".", "SwapUsage", ".", "." ],
+                                        [ ".", "DatabaseConnections", ".", "." ],
+                                        [ ".", "FreeStorageSpace", ".", "." ],
+                                        [ ".", "ReadThroughput", ".", "." ],
+                                        [ ".", "WriteLatency", ".", "." ],
+                                        [ ".", "WriteThroughput", ".", "." ],
+                                        [ ".", "ReadIOPS", ".", "." ],
+                                        [ ".", "DiskQueueDepth", ".", "." ],
+                                        [ ".", "WriteIOPS", ".", "." ],
+                                        [ ".", "NetworkTransmitThroughput", ".", "." ],
+                                        [ ".", "NetworkReceiveThroughput", ".", "." ],
+                                        [ ".", "ReadLatency", ".", "." ],
+                                        [ ".", "DBLoadCPU", ".", "." ],
+                                        [ ".", "DBLoadNonCPU", ".", "." ],
+                                        [ ".", "DBLoad", ".", "." ],
+                                        [ ".", "EBSByteBalance%", ".", "." ],
+                                        [ ".", "EBSIOBalance%", ".", "." ],
+                                        [ ".", "CPUUtilization", ".", "." ],
+                                        [ ".", "BurstBalance", ".", "." ]
+                                    ],
+                                    "region": "us-east-1",
+                                    "title": "RDS"
+                                }
+                            },
+                            {
+                                "type": "alarm",
+                                "x": 0,
+                                "y": 6,
+                                "width": 24,
+                                "height": 2,
+                                "properties": {
+                                    "title": "RDS",
+                                    "alarms": [
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-qa-YOUR_APP_CODE-YOUR_PROJECT_NAME-qa-rds-RDS- disk requests pending are high",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-qa-YOUR_APP_CODE-YOUR_PROJECT_NAME-qa-rds-RDS-CPU is high",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-qa-YOUR_APP_CODE-YOUR_PROJECT_NAME-qa-rds-RDS- Swap space used",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-qa-YOUR_APP_CODE-YOUR_PROJECT_NAME-qa-rds-RDS- Disk Used is high",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-qa-YOUR_APP_CODE-YOUR_PROJECT_NAME-qa-rds-RDS- Memory Used is high"
+                                    ]
+                                }
+                            },
+                            {
+                                "type": "metric",
+                                "x": 0,
+                                "y": 8,
+                                "width": 24,
+                                "height": 3,
+                                "properties": {
+                                    "view": "timeSeries",
+                                    "stacked": false,
+                                    "metrics": [
+                                        [ "AWS/ApplicationELB", "HealthyHostCount", "TargetGroup", "targetgroup/YOUR_APP_CODE-TARGET-GROUP-5PB9RX7IAGRP/f5b91858a96a41a1", "LoadBalancer", "app/YOUR_APP_CODE-YOUR_PROJECT_NAME-qa-alb/c44c597244fa3da5" ],
+                                        [ "AWS/ApplicationELB", "HealthyHostCount", "TargetGroup", "targetgroup/YOUR_APP_CODE-TARGET-GROUP-XNKB2K7NWS5P/147aa2b3fa0ebacb", "LoadBalancer", "app/YOUR_APP_CODE-YOUR_PROJECT_NAME-qa-albExt/cc568dc9c73adb5c" ]
+                                    ],
+                                    "region": "us-east-1"
+                                }
+                            },
+                            {
+                                "type": "alarm",
+                                "x": 0,
+                                "y": 11,
+                                "width": 24,
+                                "height": 2,
+                                "properties": {
+                                    "title": "ALB",
+                                    "alarms": [
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-qa-app/YOUR_APP_CODE-YOUR_PROJECT_NAME-qa-albExt/cc568dc9c73adb5c-ALB-HTTP Error Code 5XX by Target is high",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-qa-app/YOUR_APP_CODE-YOUR_PROJECT_NAME-qa-alb/c44c597244fa3da5-ALB-Connections unsuccessful to Target",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-qa-app/YOUR_APP_CODE-YOUR_PROJECT_NAME-qa-alb/c44c597244fa3da5-ALB-Connections are being rejected by LB",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-qa-app/YOUR_APP_CODE-YOUR_PROJECT_NAME-qa-alb/c44c597244fa3da5-ALB-HTTP Error Code 5XX by Target is high"
+                                    ]
+                                }
+                            },
+                            {
+                                "type": "alarm",
+                                "x": 6,
+                                "y": 13,
+                                "width": 6,
+                                "height": 2,
+                                "properties": {
+                                    "title": "Certificates",
+                                    "alarms": [
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-qa-arn:aws:acm:us-east-1:YOUR_AWS_ACCOUNT_ID:certificate/YOUR_RESOURCE_ID-ACM certificate 5 days to expire",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-qa-arn:aws:acm:us-east-1:YOUR_AWS_ACCOUNT_ID:certificate/YOUR_RESOURCE_ID-ACM certificate 5 days to expire"
+                                    ]
+                                }
+                            },
+                            {
+                                "type": "metric",
+                                "x": 0,
+                                "y": 13,
+                                "width": 6,
+                                "height": 6,
+                                "properties": {
+                                    "view": "timeSeries",
+                                    "stacked": false,
+                                    "metrics": [
+                                        [ "AWS/CertificateManager", "DaysToExpiry", "CertificateArn", "arn:aws:acm:us-east-1:YOUR_AWS_ACCOUNT_ID:certificate/YOUR_RESOURCE_ID" ],
+                                        [ "AWS/CertificateManager", "DaysToExpiry", "CertificateArn", "arn:aws:acm:us-east-1:YOUR_AWS_ACCOUNT_ID:certificate/YOUR_RESOURCE_ID" ]
+                                    ],
+                                    "region": "us-east-1"
+                                }
+                            },
+                            {
+                                "type": "alarm",
+                                "x": 12,
+                                "y": 13,
+                                "width": 12,
+                                "height": 2,
+                                "properties": {
+                                    "title": "ASG",
+                                    "alarms": [
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-qa-YOUR_APP_CODE-YOUR_PROJECT_NAME-qa-asg-rAutoScaling-YOUR_ASG_RESOURCE_ID-CPUHighASGatMax",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-qa-YOUR_APP_CODE-YOUR_PROJECT_NAME-qa-asg-rAutoScaling-YOUR_ASG_RESOURCE_ID-NoInstancesInService"
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+
+### Dashboard DEV 
+  rDashboardDev:
+    Type: AWS::CloudWatch::Dashboard
+    Condition: CreateDevResources
+    Properties:
+      DashboardName: !Ref pAlarmAlias
+      DashboardBody: 
+        Fn::Sub: |
+                    {
+                        "widgets": [
+                            {
+                                "type": "metric",
+                                "x": 0,
+                                "y": 0,
+                                "width": 24,
+                                "height": 6,
+                                "properties": {
+                                    "view": "timeSeries",
+                                    "stacked": false,
+                                    "metrics": [
+                                        [ "AWS/RDS", "DatabaseConnections", "DBInstanceIdentifier", "YOUR_APP_CODE-YOUR_PROJECT_NAME-dev-rds" ],
+                                        [ ".", "ReadLatency", ".", "." ],
+                                        [ ".", "EBSIOBalance%", ".", "." ],
+                                        [ ".", "DBLoadCPU", ".", "." ],
+                                        [ ".", "FreeStorageSpace", ".", "." ],
+                                        [ ".", "BurstBalance", ".", "." ],
+                                        [ ".", "DBLoadNonCPU", ".", "." ],
+                                        [ ".", "FreeableMemory", ".", "." ],
+                                        [ ".", "SwapUsage", ".", "." ],
+                                        [ ".", "NetworkReceiveThroughput", ".", "." ],
+                                        [ ".", "ReadThroughput", ".", "." ],
+                                        [ ".", "WriteThroughput", ".", "." ],
+                                        [ ".", "WriteLatency", ".", "." ],
+                                        [ ".", "WriteIOPS", ".", "." ],
+                                        [ ".", "DiskQueueDepth", ".", "." ],
+                                        [ ".", "EBSByteBalance%", ".", "." ],
+                                        [ ".", "NetworkTransmitThroughput", ".", "." ],
+                                        [ ".", "CPUUtilization", ".", "." ],
+                                        [ ".", "DBLoad", ".", "." ],
+                                        [ ".", "ReadIOPS", ".", "." ]
+                                    ],
+                                    "region": "us-east-1",
+                                    "title": "RDS"
+                                }
+                            },
+                            {
+                                "type": "alarm",
+                                "x": 0,
+                                "y": 6,
+                                "width": 24,
+                                "height": 2,
+                                "properties": {
+                                    "title": "RDS",
+                                    "alarms": [
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-dev-YOUR_APP_CODE-YOUR_PROJECT_NAME-dev-rds-RDS-CPU is high",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-dev-YOUR_APP_CODE-YOUR_PROJECT_NAME-dev-rds-RDS- disk requests pending are high",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-dev-YOUR_APP_CODE-YOUR_PROJECT_NAME-dev-rds-RDS- Swap space used",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-dev-YOUR_APP_CODE-YOUR_PROJECT_NAME-dev-rds-RDS- Memory Used is high",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-dev-YOUR_APP_CODE-YOUR_PROJECT_NAME-dev-rds-RDS- Disk Used is high"
+                                    ]
+                                }
+                            },
+                            {
+                                "type": "metric",
+                                "x": 0,
+                                "y": 8,
+                                "width": 24,
+                                "height": 6,
+                                "properties": {
+                                    "metrics": [
+                                        [ "AWS/ApplicationELB", "HealthyHostCount", "TargetGroup", "targetgroup/YOUR_APP_CODE-TARGET-GROUP-CQ9DA8DNDP4B/c02d9b97dc25e751", "LoadBalancer", "app/YOUR_APP_CODE-YOUR_PROJECT_NAME-dev-alb/d5d83180bd2c6d44" ],
+                                        [ ".", ".", ".", ".", ".", ".", "AvailabilityZone", "us-east-1a", { "visible": false } ],
+                                        [ "...", "us-east-1b", { "visible": false } ]
+                                    ],
+                                    "view": "timeSeries",
+                                    "stacked": false,
+                                    "region": "us-east-1",
+                                    "stat": "Average",
+                                    "period": 300
+                                }
+                            },
+                            {
+                                "type": "alarm",
+                                "x": 0,
+                                "y": 14,
+                                "width": 24,
+                                "height": 2,
+                                "properties": {
+                                    "title": "ALB",
+                                    "alarms": [
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-dev-app/YOUR_APP_CODE-YOUR_PROJECT_NAME-dev-alb/d5d83180bd2c6d44-ALB-HTTP Error Code 5XX by Target is high",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-dev-app/YOUR_APP_CODE-YOUR_PROJECT_NAME-dev-alb/d5d83180bd2c6d44-ALB-HTTP Error Code 5XX is high",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-dev-app/YOUR_APP_CODE-YOUR_PROJECT_NAME-dev-alb/d5d83180bd2c6d44-ALB-Connections unsuccessful to Target",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-dev-app/YOUR_APP_CODE-YOUR_PROJECT_NAME-dev-alb/d5d83180bd2c6d44-ALB-Connections are being rejected by LB"
+                                    ]
+                                }
+                            },
+                            {
+                                "type": "alarm",
+                                "x": 6,
+                                "y": 16,
+                                "width": 6,
+                                "height": 2,
+                                "properties": {
+                                    "title": "",
+                                    "alarms": [
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-dev-arn:aws:acm:us-east-1:YOUR_AWS_ACCOUNT_ID:certificate/YOUR_RESOURCE_ID-ACM certificate 5 days to expire"
+                                    ]
+                                }
+                            },
+                            {
+                                "type": "metric",
+                                "x": 0,
+                                "y": 16,
+                                "width": 6,
+                                "height": 6,
+                                "properties": {
+                                    "view": "timeSeries",
+                                    "stacked": false,
+                                    "metrics": [
+                                        [ "AWS/CertificateManager", "DaysToExpiry", "CertificateArn", "arn:aws:acm:us-east-1:YOUR_AWS_ACCOUNT_ID:certificate/YOUR_RESOURCE_ID" ]
+                                    ],
+                                    "region": "us-east-1"
+                                }
+                            },
+                            {
+                                "type": "alarm",
+                                "x": 12,
+                                "y": 16,
+                                "width": 12,
+                                "height": 2,
+                                "properties": {
+                                    "title": "ASG",
+                                    "alarms": [
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-dev-YOUR_APP_CODE-YOUR_PROJECT_NAME-dev-asg-rAutoScaling-YOUR_ASG_RESOURCE_ID-CPUHighASGatMax",
+                                        "arn:aws:cloudwatch:us-east-1:YOUR_AWS_ACCOUNT_ID:alarm:DCM-YOUR_APP_CODE-YOUR_PROJECT_NAME-dev-YOUR_APP_CODE-YOUR_PROJECT_NAME-dev-asg-rAutoScaling-YOUR_ASG_RESOURCE_ID-NoInstancesInService"
+                                    ]
+                                }
+                            }
+                        ]
+                    }

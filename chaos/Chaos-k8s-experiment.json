@@ -1,0 +1,109 @@
+{
+    "version": "1.0.0",
+    "title": "Simulate mz failure in EKS",
+    "description": "Simulate mz failure in EKS",
+    "tags": [
+        "Application-Code:#{app_code}#",
+        "Project-Name:#{project_name}#"
+    ],
+    "configuration": {},
+    "steady-state-hypothesis": {
+        "title": "Instances and services are available and healthy",
+        "probes": [
+            {
+                "type": "probe",
+                "name": "cluster status",
+                "background": false,
+                "tolerance":{
+                    "type": "regex",
+                    "target": "stdout",
+                    "pattern": "ACTIVE"
+    
+                },
+                "provider": {
+                    "type": "process",
+                    "path": "aws",
+                    "arguments": ["eks", "describe-cluster", "--name", "#{aws_cluster_name}#","--region", "us-east-1","--query","cluster.status","--output","text"]
+                }
+            },
+            {
+                "name": "count-instances",
+                "type": "probe",
+                "tolerance":{
+                    "type": "range",
+                    "range": #{range}#
+                },
+                "provider": {
+                    "type": "python",
+                    "module": "chaosaws.ec2.probes",
+                    "func": "count_instances",
+                    "arguments": {
+                        "filters": [
+                            {
+                                "Name": "tag:#{tag_key}#",
+                                "Values": ["#{tag_value}#"]
+                            },
+                            {
+                                "Name": "instance-state-name",
+                                "Values": ["running"]
+                            }
+                        ]
+                    }
+                }
+            }
+        ]
+    },
+    "method": [
+        {
+            "type": "action",
+            "name": "update cluster",
+            "background": false,
+            "provider": {
+                "type": "process",
+                "path": "python",
+                "arguments": "#{path_to_file}#/update_cluster.py #{cluster_id}# #{account_id}# #{bearer_token}# #{active_subnets}#"
+            }
+        },
+        {
+            "name": "change-subnets",
+            "type": "action",            
+            "provider": {
+                "type": "python",
+                "module": "chaosaws.asg.actions",
+                "func": "change_subnets",
+                "arguments":{
+                    "subnets": ["#{active_subnets}#"],
+                    "tags": [
+                        {
+                            "Key": "#{tag_key}#",
+                            "Value": "#{tag_value}#"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "name": "terminate-ec2-instances",
+            "type": "action",
+            "provider": {
+                "module": "chaosaws.ec2.actions",
+                "func": "terminate_instances",
+                "type": "python",
+                "arguments": {
+                    "az": "#{az_kill}#",
+                    "filters": [
+                        {
+                            "Name": "tag:#{tag_key}#",
+                            "Values": ["#{tag_value}#"]
+                        },
+                        {
+                            "Name": "instance-state-name",
+                            "Values": ["running"]
+                        }
+                    ]
+                }
+            }
+        }
+    ],
+    "rollbacks": []
+}
